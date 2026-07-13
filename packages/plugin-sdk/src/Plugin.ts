@@ -1,4 +1,11 @@
+export interface PluginContext {
+  readonly frameworkVersion: string;
+}
+
 export interface Plugin {
   readonly name: string;
-  initialize(): Promise<void>;
+
+  initialize(context: PluginContext): Promise<void>;
+
+  shutdown?(): Promise<void>;
 }

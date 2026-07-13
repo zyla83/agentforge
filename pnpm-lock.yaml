@@ -26,6 +26,9 @@ importers:
       '@agentforge/plugin-sdk':
         specifier: workspace:*
         version: link:../plugin-sdk
+      '@agentforge/shared':
+        specifier: workspace:*
+        version: link:../shared
 
   packages/plugin-sdk: {}
 
