@@ -9,6 +9,7 @@
   "scripts": {
     "build": "pnpm --recursive --if-present run build",
     "check": "biome check .",
+    "example:basic": "pnpm --filter @agentforge/example-basic run start",
     "format": "biome format --write .",
     "test": "pnpm run build && vitest run"
   },

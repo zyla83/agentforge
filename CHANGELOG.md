@@ -9,3 +9,4 @@
 - Basic tests
 - Predictable plugin registration, startup, rollback, and shutdown lifecycle
 - Public framework states and focused lifecycle error types
+- Runnable basic example demonstrating the plugin lifecycle
