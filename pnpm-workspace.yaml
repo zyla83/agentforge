@@ -1,2 +1,9 @@
 packages:
   - "packages/*"
+
+overrides:
+  postcss: 8.5.6
+
+allowBuilds:
+  "@biomejs/biome": true
+  esbuild: true

@@ -2,9 +2,9 @@
   "name": "agentforge",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@10.13.1",
+  "packageManager": "pnpm@11.12.0",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "build": "pnpm --recursive --if-present run build",
