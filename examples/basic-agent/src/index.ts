@@ -7,7 +7,7 @@ function createExamplePlugin(name: string): Plugin {
 
     async initialize(context) {
       console.log(
-        `[${name}] initialized with AgentForge ${context.frameworkVersion}`,
+        `[${name}] initialized in ${context.instanceName} with AgentForge ${context.frameworkVersion}; configuration: ${JSON.stringify(context.configuration)}`,
       );
     },
 
@@ -18,7 +18,17 @@ function createExamplePlugin(name: string): Plugin {
 }
 
 async function main(): Promise<void> {
-  const agent = new AgentForge();
+  const agent = new AgentForge({
+    instanceName: "basic-agent",
+    plugins: {
+      database: {
+        storage: "memory",
+      },
+      assistant: {
+        language: "en",
+      },
+    },
+  });
 
   agent
     .register(createExamplePlugin("database"))

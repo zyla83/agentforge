@@ -1,8 +1,9 @@
 # Basic Agent Example
 
-This example demonstrates the AgentForge plugin lifecycle with two plugins.
-The `database` plugin initializes before `assistant`, while `assistant` shuts
-down before `database`.
+This example demonstrates validated instance configuration and the AgentForge
+plugin lifecycle with two plugins. Each plugin receives only its own
+configuration. The `database` plugin initializes before `assistant`, while
+`assistant` shuts down before `database`.
 
 Build the repository and run the example:
 

@@ -1,5 +1,5 @@
 {
-  "name": "@agentforge/core",
+  "name": "@agentforge/config",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -15,8 +15,7 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@agentforge/config": "workspace:*",
-    "@agentforge/plugin-sdk": "workspace:*",
-    "@agentforge/shared": "workspace:*"
+    "@agentforge/shared": "workspace:*",
+    "zod": "4.4.3"
   }
 }

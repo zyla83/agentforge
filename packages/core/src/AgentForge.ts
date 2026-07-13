@@ -4,6 +4,11 @@
  * The framework exposes a single facade responsible for bootstrapping
  * and managing registered plugins.
  */
+import {
+  type AgentForgeConfig,
+  type AgentForgeConfigInput,
+  loadConfig,
+} from "@agentforge/config";
 import type { Plugin } from "@agentforge/plugin-sdk";
 import {
   DuplicatePluginError,
@@ -17,10 +22,15 @@ import { AgentForgeState } from "./AgentForgeState.js";
 import { AGENTFORGE_VERSION } from "./version.js";
 
 export class AgentForge {
+  private readonly config: Readonly<AgentForgeConfig>;
   private readonly plugins: Plugin[] = [];
   private readonly pluginNames = new Set<string>();
   private readonly initializedPlugins: Plugin[] = [];
   private state = AgentForgeState.Created;
+
+  constructor(config?: AgentForgeConfigInput) {
+    this.config = loadConfig(config);
+  }
 
   register(plugin: Plugin): this {
     this.assertState("register a plugin", AgentForgeState.Created);
@@ -45,7 +55,11 @@ export class AgentForge {
 
     for (const plugin of this.plugins) {
       try {
-        await plugin.initialize({ frameworkVersion: AGENTFORGE_VERSION });
+        await plugin.initialize({
+          frameworkVersion: AGENTFORGE_VERSION,
+          instanceName: this.config.instanceName,
+          configuration: this.config.plugins[plugin.name],
+        });
         this.initializedPlugins.push(plugin);
       } catch (error) {
         await this.rollbackStartup();
@@ -85,6 +99,10 @@ export class AgentForge {
 
   getState(): AgentForgeState {
     return this.state;
+  }
+
+  getConfig(): Readonly<AgentForgeConfig> {
+    return this.config;
   }
 
   getPluginCount(): number {

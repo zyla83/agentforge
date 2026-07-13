@@ -34,8 +34,20 @@ importers:
         specifier: 22.15.30
         version: 22.15.30
 
+  packages/config:
+    dependencies:
+      '@agentforge/shared':
+        specifier: workspace:*
+        version: link:../shared
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
   packages/core:
     dependencies:
+      '@agentforge/config':
+        specifier: workspace:*
+        version: link:../config
       '@agentforge/plugin-sdk':
         specifier: workspace:*
         version: link:../plugin-sdk
@@ -669,6 +681,9 @@ packages:
     engines: {node: '>=8'}
     hasBin: true
 
+  zod@4.4.3:
+    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+
 snapshots:
 
   '@biomejs/biome@1.9.4':
@@ -1150,3 +1165,5 @@ snapshots:
     dependencies:
       siginfo: 2.0.0
       stackback: 0.0.2
+
+  zod@4.4.3: {}

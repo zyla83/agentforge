@@ -1,5 +1,7 @@
 export interface PluginContext {
   readonly frameworkVersion: string;
+  readonly instanceName: string;
+  readonly configuration: unknown;
 }
 
 export interface Plugin {

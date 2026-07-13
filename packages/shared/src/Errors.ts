@@ -22,6 +22,21 @@ export class InvalidPluginNameError extends AgentForgeError {
   }
 }
 
+export class InvalidConfigurationError extends AgentForgeError {
+  readonly details: readonly string[];
+
+  constructor(details: readonly string[], options?: ErrorOptions) {
+    const detailCopies = Object.freeze([...details]);
+
+    super(
+      `Invalid AgentForge configuration: ${detailCopies.join("; ")}`,
+      options,
+    );
+    this.name = "InvalidConfigurationError";
+    this.details = detailCopies;
+  }
+}
+
 export class InvalidLifecycleOperationError extends AgentForgeError {
   readonly operation: string;
   readonly state: string;

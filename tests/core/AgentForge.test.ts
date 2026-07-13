@@ -6,6 +6,7 @@ import {
 import type { Plugin, PluginContext } from "@agentforge/plugin-sdk";
 import {
   DuplicatePluginError,
+  InvalidConfigurationError,
   InvalidLifecycleOperationError,
   InvalidPluginNameError,
   PluginInitializationError,
@@ -48,6 +49,121 @@ async function captureError(action: () => Promise<void>): Promise<unknown> {
 
   throw new Error("Expected the action to reject.");
 }
+
+describe("AgentForge configuration", () => {
+  it("uses the default configuration", () => {
+    const agent = new AgentForge();
+
+    expect(agent.getConfig()).toEqual({
+      instanceName: "default",
+      plugins: {},
+    });
+  });
+
+  it("exposes validated configuration", () => {
+    const agent = new AgentForge({
+      instanceName: "  desktop-assistant  ",
+      plugins: { example: { enabled: true } },
+    });
+
+    expect(agent.getConfig()).toEqual({
+      instanceName: "desktop-assistant",
+      plugins: { example: { enabled: true } },
+    });
+  });
+
+  it("rejects invalid configuration during construction", () => {
+    expect(() => new AgentForge({ instanceName: "" })).toThrow(
+      InvalidConfigurationError,
+    );
+  });
+
+  it("passes the configured instance name to plugins", async () => {
+    let instanceName: string | undefined;
+    const agent = new AgentForge({
+      instanceName: "desktop-assistant",
+    }).register(
+      createPlugin("example", {
+        initialize: (context) => {
+          instanceName = context.instanceName;
+        },
+      }),
+    );
+
+    await agent.start();
+
+    expect(instanceName).toBe("desktop-assistant");
+  });
+
+  it("passes only the plugin's own configuration", async () => {
+    let receivedConfiguration: unknown;
+    const databaseConfiguration = { connectionString: "local" };
+    const agent = new AgentForge({
+      plugins: {
+        database: databaseConfiguration,
+        assistant: { language: "pl" },
+      },
+    }).register(
+      createPlugin("database", {
+        initialize: (context) => {
+          receivedConfiguration = context.configuration;
+        },
+      }),
+    );
+
+    await agent.start();
+
+    expect(receivedConfiguration).toEqual(databaseConfiguration);
+  });
+
+  it("passes undefined to a plugin without configuration", async () => {
+    let receivedConfiguration: unknown = "not initialized";
+    const agent = new AgentForge().register(
+      createPlugin("example", {
+        initialize: (context) => {
+          receivedConfiguration = context.configuration;
+        },
+      }),
+    );
+
+    await agent.start();
+
+    expect(receivedConfiguration).toBeUndefined();
+  });
+
+  it("passes different configuration values to different plugins", async () => {
+    const receivedConfigurations = new Map<string, unknown>();
+    const agent = new AgentForge({
+      plugins: {
+        database: { storage: "memory" },
+        assistant: { language: "en" },
+      },
+    })
+      .register(
+        createPlugin("database", {
+          initialize: (context) => {
+            receivedConfigurations.set("database", context.configuration);
+          },
+        }),
+      )
+      .register(
+        createPlugin("assistant", {
+          initialize: (context) => {
+            receivedConfigurations.set("assistant", context.configuration);
+          },
+        }),
+      );
+
+    await agent.start();
+
+    expect(receivedConfigurations.get("database")).toEqual({
+      storage: "memory",
+    });
+    expect(receivedConfigurations.get("assistant")).toEqual({
+      language: "en",
+    });
+  });
+});
 
 describe("AgentForge registration", () => {
   it("starts with zero plugins", () => {

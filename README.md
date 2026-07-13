@@ -49,6 +49,25 @@ shutdown.
 This release establishes the framework foundation. Providers and integrations
 for Ollama, Whisper, and Piper are not implemented yet.
 
+## Configuration
+
+AgentForge validates configuration during construction and rejects unknown
+top-level properties.
+
+```ts
+const agent = new AgentForge({
+  instanceName: "desktop-assistant",
+  plugins: {
+    example: {
+      enabled: true,
+    },
+  },
+});
+```
+
+Plugin configuration is passed to its owning plugin as `unknown`. Each plugin
+is responsible for validating its own configuration value.
+
 ## Plugin lifecycle
 
 Plugins are registered before the framework starts. AgentForge initializes them
