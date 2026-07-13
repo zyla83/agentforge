@@ -14,6 +14,7 @@ import {
   type PluginShutdownFailure,
 } from "@agentforge/shared";
 import { AgentForgeState } from "./AgentForgeState.js";
+import { AGENTFORGE_VERSION } from "./version.js";
 
 export class AgentForge {
   private readonly plugins: Plugin[] = [];
@@ -44,7 +45,7 @@ export class AgentForge {
 
     for (const plugin of this.plugins) {
       try {
-        await plugin.initialize({ frameworkVersion: "0.1.0" });
+        await plugin.initialize({ frameworkVersion: AGENTFORGE_VERSION });
         this.initializedPlugins.push(plugin);
       } catch (error) {
         await this.rollbackStartup();

@@ -1,4 +1,8 @@
-import { AgentForge, AgentForgeState } from "@agentforge/core";
+import {
+  AGENTFORGE_VERSION,
+  AgentForge,
+  AgentForgeState,
+} from "@agentforge/core";
 import type { Plugin, PluginContext } from "@agentforge/plugin-sdk";
 import {
   DuplicatePluginError,
@@ -123,6 +127,10 @@ describe("AgentForge registration", () => {
 });
 
 describe("AgentForge start lifecycle", () => {
+  it("exposes the framework runtime version", () => {
+    expect(AGENTFORGE_VERSION).toBe("0.1.0");
+  });
+
   it("starts without plugins", async () => {
     const agent = new AgentForge();
 
@@ -160,7 +168,7 @@ describe("AgentForge start lifecycle", () => {
 
     await agent.start();
 
-    expect(receivedContext).toEqual({ frameworkVersion: "0.1.0" });
+    expect(receivedContext?.frameworkVersion).toBe(AGENTFORGE_VERSION);
   });
 
   it("transitions to Running", async () => {

@@ -10,3 +10,4 @@
 - Predictable plugin registration, startup, rollback, and shutdown lifecycle
 - Public framework states and focused lifecycle error types
 - Runnable basic example demonstrating the plugin lifecycle
+- Public `AGENTFORGE_VERSION` runtime version constant
