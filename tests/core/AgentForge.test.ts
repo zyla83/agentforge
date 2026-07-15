@@ -530,14 +530,21 @@ describe("AgentForge plugin metadata", () => {
     ).toThrow(InvalidPluginVersionError);
   });
 
-  it.each(["", "latest", "v1.0.0", "1.0.0.0", "01.0.0", "1.0"])(
-    "rejects invalid semantic version %s",
-    (version) => {
-      expect(() =>
-        new AgentForge().register(createPlugin("example", {}, { version })),
-      ).toThrow(InvalidPluginVersionError);
-    },
-  );
+  it.each([
+    "",
+    "latest",
+    "v1.0.0",
+    "1.0.0.0",
+    "01.0.0",
+    "1.0",
+    "1.0.0-alpha beta",
+    "1.0.0+build 42",
+    "1.0.0-alpha_beta",
+  ])("rejects invalid semantic version %s", (version) => {
+    expect(() =>
+      new AgentForge().register(createPlugin("example", {}, { version })),
+    ).toThrow(InvalidPluginVersionError);
+  });
 
   it("exposes invalid version details", () => {
     const pluginVersion = { channel: "latest" };
