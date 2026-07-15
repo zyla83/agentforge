@@ -13,6 +13,9 @@ export default defineConfig({
       "@agentforge/logger": fileURLToPath(
         new URL("./packages/logger/src/index.ts", import.meta.url),
       ),
+      "@agentforge/ollama-client": fileURLToPath(
+        new URL("./packages/ollama-client/src/index.ts", import.meta.url),
+      ),
       "@agentforge/plugin-sdk": fileURLToPath(
         new URL("./packages/plugin-sdk/src/index.ts", import.meta.url),
       ),

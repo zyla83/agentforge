@@ -39,6 +39,7 @@ shutdown.
 ## Workspace
 
 - `packages/core` - the AgentForge facade and framework lifecycle
+- `packages/ollama-client` - low-level transport client for the Ollama REST API
 - `packages/plugin-sdk` - the public plugin contract
 - `packages/provider-mock` - deterministic in-memory LLM provider for tests and examples
 - `packages/provider-sdk` - base contracts for external capability providers
@@ -48,8 +49,8 @@ shutdown.
 
 ## Current state
 
-This release establishes the framework foundation. Providers and integrations
-for Ollama, Whisper, and Piper are not implemented yet.
+This release establishes the framework foundation. Provider integrations for
+Ollama, Whisper, and Piper are not implemented yet.
 
 ## Configuration
 
@@ -201,6 +202,36 @@ The mock supports configurable metadata, response content, finish reason, and
 health results. It is not intended to simulate every behavior of a real LLM
 provider, including streaming, tool calls, latency, model behavior, or network
 failures.
+
+## Ollama HTTP client
+
+`@agentforge/ollama-client` is a low-level client for the local Ollama REST API.
+It uses `http://localhost:11434` by default, so Ollama must be running for real
+requests.
+
+```ts
+import { OllamaClient } from "@agentforge/ollama-client";
+
+const client = new OllamaClient();
+
+const version = await client.getVersion();
+const models = await client.listModels();
+
+const response = await client.chat({
+  model: "gemma3",
+  messages: [
+    {
+      role: "user",
+      content: "Hello",
+    },
+  ],
+});
+```
+
+Chat requests are currently non-streaming. Per-request cancellation uses
+`AbortSignal`, while connection, HTTP, response, timeout, and cancellation
+failures use transport-specific errors. This client is not yet an AgentForge
+`LLMProvider`.
 
 ## Registering LLM providers
 

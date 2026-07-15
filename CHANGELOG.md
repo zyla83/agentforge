@@ -30,3 +30,5 @@
 - `@agentforge/provider-mock` package with deterministic LLM responses and configurable health results
 - Immutable mock request history for inspecting validated generation calls
 - Basic example generation through the registered default mock LLM provider
+- `@agentforge/ollama-client` transport client for server version, model listing, and non-streaming chat
+- Ollama request timeouts, `AbortSignal` cancellation, and structured transport errors

@@ -3,6 +3,7 @@
   "references": [
     { "path": "./packages/config" },
     { "path": "./packages/logger" },
+    { "path": "./packages/ollama-client" },
     { "path": "./packages/plugin-sdk" },
     { "path": "./packages/provider-mock" },
     { "path": "./packages/provider-sdk" },
