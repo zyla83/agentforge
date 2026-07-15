@@ -18,3 +18,7 @@
 - Structured plugin metadata with Semantic Versioning validation
 - Registration-time metadata snapshots and plugin versions in logger bindings
 - Exact plugin lookup, registration checks, and ordered read-only metadata listing
+- `@agentforge/provider-sdk` package with base provider and metadata contracts
+- Immutable provider health results and status helpers
+- Provider request options with timeout validation and native abort checks
+- Provider-specific error hierarchy with cause preservation

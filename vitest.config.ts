@@ -16,6 +16,9 @@ export default defineConfig({
       "@agentforge/plugin-sdk": fileURLToPath(
         new URL("./packages/plugin-sdk/src/index.ts", import.meta.url),
       ),
+      "@agentforge/provider-sdk": fileURLToPath(
+        new URL("./packages/provider-sdk/src/index.ts", import.meta.url),
+      ),
       "@agentforge/shared": fileURLToPath(
         new URL("./packages/shared/src/index.ts", import.meta.url),
       ),

@@ -40,6 +40,7 @@ shutdown.
 
 - `packages/core` - the AgentForge facade and framework lifecycle
 - `packages/plugin-sdk` - the public plugin contract
+- `packages/provider-sdk` - base contracts for external capability providers
 - `packages/shared` - shared framework utilities
 - `examples/basic-agent` - runnable plugin lifecycle example
 - `tests` - repository-level tests
@@ -89,6 +90,37 @@ const agent = new AgentForge(config, {
   logger: customLogger,
 });
 ```
+
+## Provider SDK
+
+Providers supply external AI or infrastructure capabilities. The base Provider
+SDK defines metadata, a standard health check, timeout declarations, and
+platform-native cancellation signals. Concrete contracts such as LLM and speech
+providers will extend this foundation in later releases.
+
+```ts
+import {
+  healthyProvider,
+  type Provider,
+  type ProviderHealth,
+  type ProviderRequestOptions,
+} from "@agentforge/provider-sdk";
+
+class ExampleProvider implements Provider {
+  readonly metadata = {
+    name: "example",
+    version: "1.0.0",
+  };
+
+  async checkHealth(
+    _options?: ProviderRequestOptions,
+  ): Promise<ProviderHealth> {
+    return healthyProvider("Example provider is ready.");
+  }
+}
+```
+
+Provider registration in `AgentForge` is not yet implemented.
 
 ## Plugin lifecycle
 
