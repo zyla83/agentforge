@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@agentforge/config": "workspace:*",
+    "@agentforge/logger": "workspace:*",
     "@agentforge/plugin-sdk": "workspace:*",
     "@agentforge/shared": "workspace:*"
   }

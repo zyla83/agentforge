@@ -3,6 +3,7 @@ import {
   AgentForge,
   AgentForgeState,
 } from "@agentforge/core";
+import type { LogContext, LogLevel, Logger } from "@agentforge/logger";
 import type { Plugin, PluginContext } from "@agentforge/plugin-sdk";
 import {
   DuplicatePluginError,
@@ -17,6 +18,75 @@ import { describe, expect, it } from "vitest";
 interface PluginHooks {
   initialize?(context: PluginContext): Promise<void> | void;
   shutdown?(): Promise<void> | void;
+}
+
+interface RecordedLog {
+  readonly level: LogLevel;
+  readonly message: string;
+  readonly context?: LogContext;
+  readonly bindings: LogContext;
+}
+
+class RecordingLogger implements Logger {
+  readonly records: RecordedLog[];
+  readonly children: RecordingLogger[];
+  readonly childBindings: LogContext[];
+  readonly bindings: LogContext;
+
+  constructor(
+    records: RecordedLog[] = [],
+    bindings: LogContext = {},
+    children: RecordingLogger[] = [],
+    childBindings: LogContext[] = [],
+  ) {
+    this.records = records;
+    this.bindings = bindings;
+    this.children = children;
+    this.childBindings = childBindings;
+  }
+
+  trace(message: string, context?: LogContext): void {
+    this.record("trace", message, context);
+  }
+
+  debug(message: string, context?: LogContext): void {
+    this.record("debug", message, context);
+  }
+
+  info(message: string, context?: LogContext): void {
+    this.record("info", message, context);
+  }
+
+  warn(message: string, context?: LogContext): void {
+    this.record("warn", message, context);
+  }
+
+  error(message: string, context?: LogContext): void {
+    this.record("error", message, context);
+  }
+
+  child(bindings: LogContext): Logger {
+    this.childBindings.push(bindings);
+    const child = new RecordingLogger(
+      this.records,
+      { ...this.bindings, ...bindings },
+      this.children,
+      this.childBindings,
+    );
+    this.children.push(child);
+
+    return child;
+  }
+
+  private record(level: LogLevel, message: string, context?: LogContext): void {
+    const record = {
+      level,
+      message,
+      bindings: this.bindings,
+    };
+
+    this.records.push(context ? { ...record, context } : record);
+  }
 }
 
 function createPlugin(name: string, hooks: PluginHooks = {}): Plugin {
@@ -162,6 +232,207 @@ describe("AgentForge configuration", () => {
     expect(receivedConfigurations.get("assistant")).toEqual({
       language: "en",
     });
+  });
+});
+
+describe("AgentForge logging", () => {
+  it("accepts a custom logger", () => {
+    const logger = new RecordingLogger();
+
+    expect(() => new AgentForge(undefined, { logger })).not.toThrow();
+    expect(logger.children).toHaveLength(1);
+  });
+
+  it("creates a child logger with framework bindings", () => {
+    const logger = new RecordingLogger();
+
+    new AgentForge({ instanceName: "desktop-assistant" }, { logger });
+
+    expect(logger.childBindings[0]).toEqual({
+      component: "agentforge",
+      instanceName: "desktop-assistant",
+    });
+  });
+
+  it("provides a logger to every plugin", async () => {
+    const logger = new RecordingLogger();
+    const receivedLoggers: Logger[] = [];
+    const agent = new AgentForge(undefined, { logger })
+      .register(
+        createPlugin("first", {
+          initialize: (context) => receivedLoggers.push(context.logger),
+        }),
+      )
+      .register(
+        createPlugin("second", {
+          initialize: (context) => receivedLoggers.push(context.logger),
+        }),
+      );
+
+    await agent.start();
+
+    expect(receivedLoggers).toHaveLength(2);
+    expect(receivedLoggers.every(Boolean)).toBe(true);
+  });
+
+  it("provides separate child loggers to plugins", async () => {
+    const logger = new RecordingLogger();
+    const receivedLoggers: Logger[] = [];
+    const agent = new AgentForge(undefined, { logger })
+      .register(
+        createPlugin("first", {
+          initialize: (context) => receivedLoggers.push(context.logger),
+        }),
+      )
+      .register(
+        createPlugin("second", {
+          initialize: (context) => receivedLoggers.push(context.logger),
+        }),
+      );
+
+    await agent.start();
+
+    expect(receivedLoggers[0]).not.toBe(receivedLoggers[1]);
+    expect(logger.childBindings).toContainEqual({
+      component: "plugin",
+      pluginName: "first",
+    });
+    expect(logger.childBindings).toContainEqual({
+      component: "plugin",
+      pluginName: "second",
+    });
+  });
+
+  it("emits framework and plugin lifecycle messages", async () => {
+    const logger = new RecordingLogger();
+    const agent = new AgentForge(undefined, { logger }).register(
+      createPlugin("example", { shutdown: () => undefined }),
+    );
+
+    await agent.start();
+    await agent.stop();
+
+    expect(logger.records.map((record) => record.message)).toEqual([
+      "AgentForge is starting",
+      "Plugin is initializing",
+      "Plugin initialized",
+      "AgentForge started",
+      "AgentForge is stopping",
+      "Plugin is shutting down",
+      "Plugin shut down",
+      "AgentForge stopped",
+    ]);
+    expect(logger.records[0]).toMatchObject({
+      level: "info",
+      context: { pluginCount: 1 },
+    });
+  });
+
+  it("logs plugin initialization failures", async () => {
+    const logger = new RecordingLogger();
+    const failure = new Error("initialization failed");
+    const agent = new AgentForge(undefined, { logger }).register(
+      createPlugin("broken", {
+        initialize: () => {
+          throw failure;
+        },
+      }),
+    );
+
+    await expect(agent.start()).rejects.toBeInstanceOf(
+      PluginInitializationError,
+    );
+
+    expect(logger.records).toContainEqual(
+      expect.objectContaining({
+        level: "error",
+        message: "Plugin initialization failed",
+        context: { error: failure },
+      }),
+    );
+  });
+
+  it("logs rollback shutdown failures", async () => {
+    const logger = new RecordingLogger();
+    const rollbackFailure = new Error("rollback failed");
+    const agent = new AgentForge(undefined, { logger })
+      .register(
+        createPlugin("first", {
+          shutdown: () => {
+            throw rollbackFailure;
+          },
+        }),
+      )
+      .register(
+        createPlugin("broken", {
+          initialize: () => {
+            throw new Error("initialization failed");
+          },
+        }),
+      );
+
+    await expect(agent.start()).rejects.toBeInstanceOf(
+      PluginInitializationError,
+    );
+
+    expect(logger.records).toContainEqual(
+      expect.objectContaining({
+        level: "warn",
+        message: "Plugin rollback shutdown failed",
+        context: { error: rollbackFailure },
+      }),
+    );
+  });
+
+  it("logs plugin shutdown failures", async () => {
+    const logger = new RecordingLogger();
+    const shutdownFailure = new Error("shutdown failed");
+    const agent = new AgentForge(undefined, { logger }).register(
+      createPlugin("broken", {
+        shutdown: () => {
+          throw shutdownFailure;
+        },
+      }),
+    );
+    await agent.start();
+
+    await expect(agent.stop()).rejects.toBeInstanceOf(PluginShutdownError);
+
+    expect(logger.records).toContainEqual(
+      expect.objectContaining({
+        level: "error",
+        message: "Plugin shutdown failed",
+        context: { error: shutdownFailure },
+      }),
+    );
+  });
+
+  it("does not change successful lifecycle behavior", async () => {
+    const logger = new RecordingLogger();
+    const agent = new AgentForge(undefined, { logger });
+
+    await agent.start();
+    expect(agent.getState()).toBe(AgentForgeState.Running);
+
+    await agent.stop();
+    expect(agent.getState()).toBe(AgentForgeState.Stopped);
+  });
+
+  it("never includes plugin configuration in logging data", async () => {
+    const logger = new RecordingLogger();
+    const agent = new AgentForge(
+      {
+        plugins: {
+          example: { secret: "classified-value" },
+        },
+      },
+      { logger },
+    ).register(createPlugin("example", { shutdown: () => undefined }));
+
+    await agent.start();
+    await agent.stop();
+
+    expect(JSON.stringify(logger.records)).not.toContain("classified-value");
   });
 });
 

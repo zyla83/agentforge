@@ -1,18 +1,19 @@
 import { AgentForge } from "@agentforge/core";
-import type { Plugin } from "@agentforge/plugin-sdk";
+import type { Plugin, PluginContext } from "@agentforge/plugin-sdk";
 
 function createExamplePlugin(name: string): Plugin {
+  let logger: PluginContext["logger"] | undefined;
+
   return {
     name,
 
     async initialize(context) {
-      console.log(
-        `[${name}] initialized in ${context.instanceName} with AgentForge ${context.frameworkVersion}; configuration: ${JSON.stringify(context.configuration)}`,
-      );
+      logger = context.logger;
+      context.logger.info("Example plugin initialized");
     },
 
     async shutdown() {
-      console.log(`[${name}] shut down`);
+      logger?.info("Example plugin shut down");
     },
   };
 }

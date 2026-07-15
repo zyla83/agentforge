@@ -5,6 +5,9 @@ plugin lifecycle with two plugins. Each plugin receives only its own
 configuration. The `database` plugin initializes before `assistant`, while
 `assistant` shuts down before `database`.
 
+Plugin lifecycle messages are emitted as structured JSON through the default
+Pino logger. The main program prints the framework state for readability.
+
 Build the repository and run the example:
 
 ```bash

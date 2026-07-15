@@ -68,6 +68,28 @@ const agent = new AgentForge({
 Plugin configuration is passed to its owning plugin as `unknown`. Each plugin
 is responsible for validating its own configuration value.
 
+## Logging
+
+AgentForge provides a default Pino logger. Each plugin receives a child logger
+through `PluginContext` and can attach structured context to a message.
+
+```ts
+async initialize(context) {
+  context.logger.info("Plugin initialized", {
+    featureEnabled: true,
+  });
+}
+```
+
+Consumers may provide their own `Logger`. Custom implementations must return a
+valid `Logger` from `child()`.
+
+```ts
+const agent = new AgentForge(config, {
+  logger: customLogger,
+});
+```
+
 ## Plugin lifecycle
 
 Plugins are registered before the framework starts. AgentForge initializes them

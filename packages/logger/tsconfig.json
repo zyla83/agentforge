@@ -6,11 +6,5 @@
     "rootDir": "./src",
     "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo"
   },
-  "include": ["src/**/*.ts"],
-  "references": [
-    { "path": "../config" },
-    { "path": "../logger" },
-    { "path": "../plugin-sdk" },
-    { "path": "../shared" }
-  ]
+  "include": ["src/**/*.ts"]
 }

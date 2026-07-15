@@ -10,6 +10,9 @@ export default defineConfig({
       "@agentforge/core": fileURLToPath(
         new URL("./packages/core/src/index.ts", import.meta.url),
       ),
+      "@agentforge/logger": fileURLToPath(
+        new URL("./packages/logger/src/index.ts", import.meta.url),
+      ),
       "@agentforge/plugin-sdk": fileURLToPath(
         new URL("./packages/plugin-sdk/src/index.ts", import.meta.url),
       ),
