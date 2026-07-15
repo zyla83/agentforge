@@ -15,6 +15,7 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@agentforge/logger": "workspace:*"
+    "@agentforge/logger": "workspace:*",
+    "@agentforge/provider-sdk": "workspace:*"
   }
 }

@@ -18,6 +18,7 @@
     "@agentforge/config": "workspace:*",
     "@agentforge/logger": "workspace:*",
     "@agentforge/plugin-sdk": "workspace:*",
+    "@agentforge/provider-sdk": "workspace:*",
     "@agentforge/shared": "workspace:*"
   }
 }

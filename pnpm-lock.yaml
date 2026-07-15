@@ -29,6 +29,9 @@ importers:
       '@agentforge/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
+      '@agentforge/provider-sdk':
+        specifier: workspace:*
+        version: link:../../packages/provider-sdk
     devDependencies:
       '@types/node':
         specifier: 22.15.30
@@ -54,6 +57,9 @@ importers:
       '@agentforge/plugin-sdk':
         specifier: workspace:*
         version: link:../plugin-sdk
+      '@agentforge/provider-sdk':
+        specifier: workspace:*
+        version: link:../provider-sdk
       '@agentforge/shared':
         specifier: workspace:*
         version: link:../shared
@@ -69,6 +75,9 @@ importers:
       '@agentforge/logger':
         specifier: workspace:*
         version: link:../logger
+      '@agentforge/provider-sdk':
+        specifier: workspace:*
+        version: link:../provider-sdk
 
   packages/provider-sdk: {}
 

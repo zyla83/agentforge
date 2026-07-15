@@ -11,6 +11,7 @@
     { "path": "../config" },
     { "path": "../logger" },
     { "path": "../plugin-sdk" },
+    { "path": "../provider-sdk" },
     { "path": "../shared" }
   ]
 }

@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "@agentforge/core": "workspace:*",
-    "@agentforge/plugin-sdk": "workspace:*"
+    "@agentforge/plugin-sdk": "workspace:*",
+    "@agentforge/provider-sdk": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "22.15.30"

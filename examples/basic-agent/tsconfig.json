@@ -10,6 +10,7 @@
   "include": ["src/**/*.ts"],
   "references": [
     { "path": "../../packages/core" },
-    { "path": "../../packages/plugin-sdk" }
+    { "path": "../../packages/plugin-sdk" },
+    { "path": "../../packages/provider-sdk" }
   ]
 }

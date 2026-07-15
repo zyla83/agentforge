@@ -25,3 +25,5 @@
 - Provider-independent `LLMProvider` contract with conversation message roles
 - LLM generation requests, responses, parameters, and immutable token usage
 - Deterministic runtime validation with aggregated LLM request details
+- LLM provider registration with explicit default-provider selection
+- Ordered read-only LLM provider registry exposed through `PluginContext`

@@ -170,8 +170,25 @@ class ExampleLLMProvider implements LLMProvider {
 ```
 
 No concrete LLM provider exists yet. Ollama support will be implemented
-separately. Streaming and tool calling are not implemented, and providers still
-cannot be registered in `AgentForge`.
+separately. Streaming and tool calling are not implemented.
+
+## Registering LLM providers
+
+Register providers and select a default before starting AgentForge:
+
+```ts
+agent.registerLLMProvider(provider, {
+  default: true,
+});
+
+const defaultProvider = agent.getDefaultLLMProvider();
+```
+
+Provider names are exact and case-sensitive. Metadata is validated and
+snapshotted during registration, and no provider becomes the default
+automatically. Plugins receive a read-only provider registry through
+`PluginContext`. Registration is allowed only before startup and does not
+perform a health check.
 
 ## Plugin lifecycle
 

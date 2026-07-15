@@ -11,6 +11,11 @@ import {
 } from "@agentforge/config";
 import { type Logger, createLogger } from "@agentforge/logger";
 import type { Plugin, PluginMetadata } from "@agentforge/plugin-sdk";
+import type {
+  LLMProvider,
+  LLMProviderRegistry,
+  ProviderMetadata,
+} from "@agentforge/provider-sdk";
 import {
   DuplicatePluginError,
   InvalidLifecycleOperationError,
@@ -20,6 +25,7 @@ import {
 } from "@agentforge/shared";
 import type { AgentForgeOptions } from "./AgentForgeOptions.js";
 import { AgentForgeState } from "./AgentForgeState.js";
+import { LLMProviderRegistryImpl } from "./providers/index.js";
 import { snapshotPluginMetadata } from "./validatePluginMetadata.js";
 import { AGENTFORGE_VERSION } from "./version.js";
 
@@ -38,6 +44,9 @@ export class AgentForge {
   private readonly plugins: RegisteredPlugin[] = [];
   private readonly pluginsByName = new Map<string, RegisteredPlugin>();
   private readonly initializedPlugins: InitializedPlugin[] = [];
+  private readonly llmProviderRegistry = new LLMProviderRegistryImpl();
+  private readonly llmProviderRegistryView: LLMProviderRegistry =
+    this.llmProviderRegistry.getView();
   private state = AgentForgeState.Created;
 
   constructor(config?: AgentForgeConfigInput, options?: AgentForgeOptions) {
@@ -59,6 +68,35 @@ export class AgentForge {
     const registeredPlugin = { plugin, metadata };
     this.plugins.push(registeredPlugin);
     this.pluginsByName.set(metadata.name, registeredPlugin);
+
+    return this;
+  }
+
+  registerLLMProvider(
+    provider: LLMProvider,
+    options?: { readonly default?: boolean },
+  ): this {
+    this.assertState("register an LLM provider", AgentForgeState.Created);
+    const isDefault = options?.default === true;
+    const { metadata } = this.llmProviderRegistry.register(provider, isDefault);
+
+    this.logger.debug("LLM provider registered", {
+      providerName: metadata.name,
+      providerVersion: metadata.version,
+      isDefault,
+    });
+
+    return this;
+  }
+
+  setDefaultLLMProvider(name: string): this {
+    this.assertState("set the default LLM provider", AgentForgeState.Created);
+    const { metadata } = this.llmProviderRegistry.setDefault(name);
+
+    this.logger.debug("Default LLM provider changed", {
+      providerName: metadata.name,
+      providerVersion: metadata.version,
+    });
 
     return this;
   }
@@ -85,6 +123,7 @@ export class AgentForge {
           instanceName: this.config.instanceName,
           configuration: this.config.plugins[metadata.name],
           logger: pluginLogger,
+          llmProviders: this.llmProviderRegistryView,
         });
         this.initializedPlugins.push({
           ...registeredPlugin,
@@ -162,6 +201,22 @@ export class AgentForge {
 
   getRegisteredPlugins(): readonly Readonly<PluginMetadata>[] {
     return Object.freeze(this.plugins.map(({ metadata }) => metadata));
+  }
+
+  hasLLMProvider(name: string): boolean {
+    return this.llmProviderRegistry.has(name);
+  }
+
+  getLLMProvider(name: string): LLMProvider | undefined {
+    return this.llmProviderRegistry.get(name);
+  }
+
+  getDefaultLLMProvider(): LLMProvider | undefined {
+    return this.llmProviderRegistry.getDefault();
+  }
+
+  getRegisteredLLMProviders(): readonly Readonly<ProviderMetadata>[] {
+    return this.llmProviderRegistry.list();
   }
 
   private assertState(operation: string, expectedState: AgentForgeState): void {
