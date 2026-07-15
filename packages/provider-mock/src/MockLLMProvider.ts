@@ -14,6 +14,8 @@ import type {
   LLMGenerationResponse,
   LLMMessage,
   LLMProvider,
+  LLMStreamEvent,
+  LLMStreamingProvider,
   ProviderHealth,
   ProviderMetadata,
   ProviderRequestOptions,
@@ -31,11 +33,12 @@ const SUPPORTED_HEALTH_STATUSES = new Set<string>(
   Object.values(ProviderHealthStatus),
 );
 
-export class MockLLMProvider implements LLMProvider {
+export class MockLLMProvider implements LLMStreamingProvider {
   readonly metadata: Readonly<ProviderMetadata>;
   private readonly responseContent: string;
   private readonly finishReason: LLMFinishReason;
   private readonly health: ProviderHealth;
+  private readonly streamDeltas: readonly string[];
   private readonly requests: Readonly<LLMGenerationRequest>[] = [];
 
   constructor(options?: MockLLMProviderOptions) {
@@ -62,6 +65,7 @@ export class MockLLMProvider implements LLMProvider {
       "health",
       healthyProvider("Mock provider is ready."),
     );
+    const streamDeltas = readOption(optionsValue, "streamDeltas", undefined);
 
     if (
       typeof responseContent !== "string" ||
@@ -89,6 +93,7 @@ export class MockLLMProvider implements LLMProvider {
     this.responseContent = responseContent;
     this.finishReason = finishReason as LLMFinishReason;
     this.health = snapshotHealth(health);
+    this.streamDeltas = snapshotStreamDeltas(streamDeltas, responseContent);
   }
 
   async checkHealth(options?: ProviderRequestOptions): Promise<ProviderHealth> {
@@ -106,16 +111,30 @@ export class MockLLMProvider implements LLMProvider {
     const requestSnapshot = snapshotRequest(request);
     this.requests.push(requestSnapshot);
 
-    const message = Object.freeze({
-      role: LLMMessageRole.Assistant,
-      content: this.responseContent,
-    });
+    return createResponse(
+      request.model,
+      this.responseContent,
+      this.finishReason,
+    );
+  }
 
-    return Object.freeze({
-      model: request.model,
-      message,
-      finishReason: this.finishReason,
-    });
+  async *stream(request: LLMGenerationRequest): AsyncIterable<LLMStreamEvent> {
+    validateLLMGenerationRequest(request);
+    throwIfProviderRequestAborted(this.metadata.name, request.request);
+    this.requests.push(snapshotRequest(request));
+
+    for (const delta of this.streamDeltas) {
+      throwIfProviderRequestAborted(this.metadata.name, request.request);
+      yield Object.freeze({ type: "delta", model: request.model, delta });
+    }
+
+    throwIfProviderRequestAborted(this.metadata.name, request.request);
+    const response = createResponse(
+      request.model,
+      this.responseContent,
+      this.finishReason,
+    );
+    yield Object.freeze({ type: "completed", response });
   }
 
   getRequests(): readonly Readonly<LLMGenerationRequest>[] {
@@ -125,6 +144,51 @@ export class MockLLMProvider implements LLMProvider {
   clearRequests(): void {
     this.requests.length = 0;
   }
+}
+
+function snapshotStreamDeltas(
+  value: unknown,
+  responseContent: string,
+): readonly string[] {
+  if (value === undefined) return Object.freeze([responseContent]);
+  const details: string[] = [];
+  if (!Array.isArray(value)) {
+    details.push("streamDeltas: must be an array");
+  } else {
+    if (value.length === 0) {
+      details.push("streamDeltas: must contain at least one delta");
+    }
+    if (value.length > 1_024) {
+      details.push("streamDeltas: must contain at most 1024 deltas");
+    }
+    value.forEach((delta, index) => {
+      if (typeof delta !== "string" || delta.length === 0) {
+        details.push(`streamDeltas[${index}]: must be a non-empty string`);
+      }
+    });
+    if (
+      value.every((delta) => typeof delta === "string") &&
+      value.join("") !== responseContent
+    ) {
+      details.push(
+        "streamDeltas: concatenated content must equal responseContent",
+      );
+    }
+  }
+  if (details.length > 0) throw new InvalidLLMRequestError(details);
+  return Object.freeze([...(value as string[])]);
+}
+
+function createResponse(
+  model: string,
+  content: string,
+  finishReason: LLMFinishReason,
+): LLMGenerationResponse {
+  const message = Object.freeze({
+    role: LLMMessageRole.Assistant,
+    content,
+  });
+  return Object.freeze({ model, message, finishReason });
 }
 
 function validateOptionsObject(

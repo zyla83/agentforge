@@ -51,9 +51,8 @@ shutdown.
 
 ## Current state
 
-This release establishes the framework foundation and non-streaming Ollama LLM
-integration. Provider integrations for Whisper and Piper are not implemented
-yet.
+This release establishes the framework foundation and Ollama LLM integration.
+Provider integrations for Whisper and Piper are not implemented yet.
 
 ## Configuration
 
@@ -101,7 +100,7 @@ const agent = new AgentForge(config, {
 Providers supply external AI or infrastructure capabilities. The base Provider
 SDK defines metadata, a standard health check, timeout declarations, and
 platform-native cancellation signals. Concrete contracts such as LLM and speech
-providers will extend this foundation in later releases.
+providers extend this foundation.
 
 ```ts
 import {
@@ -131,9 +130,10 @@ Provider registration in `AgentForge` is not yet implemented.
 
 LLM providers accept conversation messages with `system`, `user`, and
 `assistant` roles. Generation requests support temperature, top-p, token limit,
-stop sequences, timeouts, and cancellation signals. Each call returns one
-complete, non-streaming response. Use `validateLLMGenerationRequest()` to
-validate requests received from runtime callers.
+stop sequences, timeouts, and cancellation signals. Providers always support
+complete responses and may additionally expose streaming. Use
+`validateLLMGenerationRequest()` to validate requests received from runtime
+callers.
 
 ```ts
 import {
@@ -174,8 +174,30 @@ class ExampleLLMProvider implements LLMProvider {
 }
 ```
 
-Production LLM integrations such as Ollama are not implemented yet. Streaming
-and tool calling are not implemented.
+Tool calling is not implemented.
+
+### Streaming LLM responses
+
+Use the capability guard before calling `stream()`, because streaming is an
+optional extension of the base LLM provider contract. Delta events contain
+incremental text; one completed event contains the final normalized response.
+
+```ts
+import { isLLMStreamingProvider } from "@agentforge/provider-sdk";
+
+if (isLLMStreamingProvider(provider)) {
+  for await (const event of provider.stream(request)) {
+    if (event.type === "delta") {
+      process.stdout.write(event.delta);
+    } else {
+      console.log(event.response.finishReason);
+    }
+  }
+}
+```
+
+The stream is lazy: validation and transport work begin when iteration starts.
+Timeouts and `AbortSignal` cancellation apply for the stream's full lifetime.
 
 ## Mock LLM provider
 
@@ -190,6 +212,7 @@ import { LLMMessageRole } from "@agentforge/provider-sdk";
 
 const provider = new MockLLMProvider({
   responseContent: "Deterministic response",
+  streamDeltas: ["Deterministic ", "response"],
 });
 
 const response = await provider.generate({
@@ -201,10 +224,9 @@ console.log(response.message.content);
 console.log(provider.getRequests().length);
 ```
 
-The mock supports configurable metadata, response content, finish reason, and
-health results. It is not intended to simulate every behavior of a real LLM
-provider, including streaming, tool calls, latency, model behavior, or network
-failures.
+The mock supports configurable metadata, response content, deterministic stream
+deltas, finish reason, and health results. It is not intended to simulate tool
+calls, latency, model behavior, or network failures.
 
 ## Ollama HTTP client
 
@@ -229,12 +251,19 @@ const response = await client.chat({
     },
   ],
 });
+
+for await (const chunk of client.chatStream({
+  model: "gemma3",
+  messages: [{ role: "user", content: "Hello" }],
+})) {
+  if (chunk.message !== undefined) process.stdout.write(chunk.message.content);
+}
 ```
 
-Chat requests are currently non-streaming. Per-request cancellation uses
-`AbortSignal`, while connection, HTTP, response, timeout, and cancellation
-failures use transport-specific errors. This client remains the low-level
-transport used by the Ollama provider.
+Both complete and incrementally parsed NDJSON chat responses are supported.
+Per-request cancellation uses `AbortSignal`, while connection, HTTP, response,
+timeout, and cancellation failures use transport-specific errors. This client
+remains the low-level transport used by the Ollama provider.
 
 ## Ollama LLM provider
 
@@ -272,11 +301,11 @@ const response = await provider?.generate({
 });
 ```
 
-Generation is non-streaming. AgentForge generation settings map to Ollama
-options, while timeout and cancellation use provider request options. Transport
-errors are converted to provider SDK errors. Registration does not perform a
-health check or download models automatically; streaming, tool calling, and
-automatic retries are not implemented.
+Complete and streaming generation share the same AgentForge-to-Ollama request
+mapping. Timeout and cancellation use provider request options, including for
+the full stream lifetime. Transport errors are converted to provider SDK errors.
+Registration does not perform a health check or download models automatically;
+tool calling and automatic retries are not implemented.
 
 Configure a model-aware health check when readiness requires a specific local
 model:

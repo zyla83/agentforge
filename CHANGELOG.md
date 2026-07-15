@@ -36,3 +36,7 @@
 - Ollama response, finish-reason, token-usage, provider-error, and health-check mapping
 - Model-aware Ollama health checks with immutable structured details
 - Degraded health status for missing required models and an optional live Ollama example
+- Provider-independent LLM delta and completion streaming contracts with runtime capability detection
+- Deterministic mock LLM streaming with validated configurable deltas
+- Incremental Ollama NDJSON chat streaming with lifetime timeout and cancellation handling
+- Streaming Ollama provider mapping, registry examples, and live incremental output

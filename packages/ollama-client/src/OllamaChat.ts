@@ -26,3 +26,12 @@ export interface OllamaChatResponse {
   readonly promptEvalCount?: number;
   readonly evalCount?: number;
 }
+
+export interface OllamaChatStreamChunk {
+  readonly model?: string;
+  readonly message?: Readonly<OllamaChatMessage>;
+  readonly done: boolean;
+  readonly doneReason?: string;
+  readonly promptEvalCount?: number;
+  readonly evalCount?: number;
+}

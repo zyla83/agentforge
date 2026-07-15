@@ -5,6 +5,7 @@ export type {
   OllamaChatRequest,
   OllamaChatResponse,
   OllamaChatRole,
+  OllamaChatStreamChunk,
 } from "./OllamaChat.js";
 export type {
   FetchImplementation,

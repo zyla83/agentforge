@@ -91,6 +91,7 @@ describe("OllamaLLMProvider options", () => {
     { listModels() {}, chat() {} },
     { getVersion() {}, chat() {} },
     { getVersion() {}, listModels() {} },
+    { getVersion() {}, listModels() {}, chat() {} },
     null,
   ])("rejects malformed injected client %#", (client) => {
     expect(() => new OllamaLLMProvider({ client: client as never })).toThrow(
@@ -195,6 +196,13 @@ describe("OllamaLLMProvider options", () => {
       },
       async chat() {
         return {
+          model: "model",
+          message: { role: "assistant" as const, content: "response" },
+          done: true,
+        };
+      },
+      async *chatStream() {
+        yield {
           model: "model",
           message: { role: "assistant" as const, content: "response" },
           done: true,

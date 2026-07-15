@@ -1,6 +1,7 @@
 import type {
   OllamaChatRequest,
   OllamaChatResponse,
+  OllamaChatStreamChunk,
   OllamaClient,
   OllamaModel,
   OllamaRequestOptions,
@@ -21,12 +22,25 @@ export class FakeOllamaClient {
     options: OllamaRequestOptions | undefined;
   }[] = [];
   readonly modelCalls: (OllamaRequestOptions | undefined)[] = [];
+  readonly streamCalls: {
+    request: OllamaChatRequest;
+    options: OllamaRequestOptions | undefined;
+  }[] = [];
   versionResult: OllamaVersion = { version: "0.12.6" };
   modelResult: readonly OllamaModel[] = [];
   chatResult: OllamaChatResponse = defaultChatResponse;
+  streamResult: readonly OllamaChatStreamChunk[] = [
+    {
+      model: "ollama-model",
+      message: { role: "assistant", content: "Ollama response" },
+      done: true,
+      doneReason: "stop",
+    },
+  ];
   versionError: unknown;
   modelError: unknown;
   chatError: unknown;
+  streamError: unknown;
   baseUrlResult: unknown;
   baseUrlError: unknown;
 
@@ -51,6 +65,15 @@ export class FakeOllamaClient {
     this.chatCalls.push({ request, options });
     if (this.chatError !== undefined) throw this.chatError;
     return this.chatResult;
+  }
+
+  async *chatStream(
+    request: OllamaChatRequest,
+    options?: OllamaRequestOptions,
+  ): AsyncIterable<OllamaChatStreamChunk> {
+    this.streamCalls.push({ request, options });
+    for (const chunk of this.streamResult) yield chunk;
+    if (this.streamError !== undefined) throw this.streamError;
   }
 
   getBaseUrl(): string {

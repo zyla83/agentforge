@@ -4,6 +4,7 @@ import {
   LLMMessageRole,
   ProviderError,
   ProviderHealthStatus,
+  isLLMStreamingProvider,
 } from "@agentforge/provider-sdk";
 
 const DEFAULT_BASE_URL = "http://localhost:11434";
@@ -40,7 +41,12 @@ async function main(): Promise<void> {
     if (defaultProvider === undefined) {
       throw new Error("No default LLM provider is registered.");
     }
-    const response = await defaultProvider.generate({
+    if (!isLLMStreamingProvider(defaultProvider)) {
+      throw new Error("The default LLM provider does not support streaming.");
+    }
+
+    process.stdout.write("Assistant: ");
+    for await (const event of defaultProvider.stream({
       model,
       messages: [
         {
@@ -50,8 +56,18 @@ async function main(): Promise<void> {
         },
       ],
       request: { timeoutMs: REQUEST_TIMEOUT_MS },
-    });
-    console.log(`Assistant: ${response.message.content}`);
+    })) {
+      if (event.type === "delta") process.stdout.write(event.delta);
+      if (event.type === "completed") {
+        const usage = event.response.usage;
+        console.log(`\nFinish reason: ${event.response.finishReason}`);
+        if (usage !== undefined) {
+          console.log(
+            `Tokens: ${usage.inputTokens} input, ${usage.outputTokens} output`,
+          );
+        }
+      }
+    }
   } finally {
     await agent.stop();
   }

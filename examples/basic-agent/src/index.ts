@@ -1,13 +1,17 @@
 import { AgentForge } from "@agentforge/core";
 import type { Plugin, PluginContext } from "@agentforge/plugin-sdk";
 import { MockLLMProvider } from "@agentforge/provider-mock";
-import { LLMMessageRole } from "@agentforge/provider-sdk";
+import {
+  LLMMessageRole,
+  isLLMStreamingProvider,
+} from "@agentforge/provider-sdk";
 
 const exampleLLMProvider = new MockLLMProvider({
   name: "example-llm",
   version: "1.0.0",
   description: "Deterministic LLM provider for the basic example.",
   responseContent: "Hello from the AgentForge mock provider.",
+  streamDeltas: ["Hello from ", "the AgentForge ", "mock provider."],
 });
 
 function createExamplePlugin(
@@ -91,6 +95,24 @@ async function main(): Promise<void> {
 
   console.log(`User: ${userMessage}`);
   console.log(`Assistant: ${response.message.content}`);
+  console.log(`Recorded requests: ${exampleLLMProvider.getRequests().length}`);
+
+  if (!isLLMStreamingProvider(defaultProvider)) {
+    throw new Error("The default LLM provider does not support streaming.");
+  }
+
+  process.stdout.write("Streaming assistant: ");
+  for await (const event of defaultProvider.stream({
+    model: "example-model",
+    messages: [
+      { role: LLMMessageRole.User, content: "Stream a greeting, please." },
+    ],
+  })) {
+    if (event.type === "delta") process.stdout.write(event.delta);
+    if (event.type === "completed") {
+      console.log(`\nStreaming finish reason: ${event.response.finishReason}`);
+    }
+  }
   console.log(`Recorded requests: ${exampleLLMProvider.getRequests().length}`);
 
   console.log("Stopping AgentForge...");

@@ -7,4 +7,5 @@ export interface MockLLMProviderOptions {
   readonly responseContent?: string;
   readonly finishReason?: LLMFinishReason;
   readonly health?: ProviderHealth;
+  readonly streamDeltas?: readonly string[];
 }

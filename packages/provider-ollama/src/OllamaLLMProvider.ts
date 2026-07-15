@@ -10,11 +10,13 @@ import {
 import type {
   OllamaChatRequest,
   OllamaChatResponse,
+  OllamaChatStreamChunk,
   OllamaModel,
   OllamaRequestOptions,
   OllamaVersion,
 } from "@agentforge/ollama-client";
 import {
+  ProviderError,
   ProviderRequestError,
   degradedProvider,
   healthyProvider,
@@ -26,7 +28,8 @@ import {
 import type {
   LLMGenerationRequest,
   LLMGenerationResponse,
-  LLMProvider,
+  LLMStreamEvent,
+  LLMStreamingProvider,
   ProviderHealth,
   ProviderMetadata,
   ProviderRequestOptions,
@@ -56,10 +59,14 @@ interface CompatibleOllamaClient {
     request: OllamaChatRequest,
     options?: OllamaRequestOptions,
   ): Promise<OllamaChatResponse>;
+  chatStream(
+    request: OllamaChatRequest,
+    options?: OllamaRequestOptions,
+  ): AsyncIterable<OllamaChatStreamChunk>;
   getBaseUrl?(): string;
 }
 
-export class OllamaLLMProvider implements LLMProvider {
+export class OllamaLLMProvider implements LLMStreamingProvider {
   readonly metadata: Readonly<ProviderMetadata>;
   private readonly client: CompatibleOllamaClient;
   private readonly healthCheck: Readonly<OllamaHealthCheckOptions> | undefined;
@@ -83,7 +90,7 @@ export class OllamaLLMProvider implements LLMProvider {
       if (!isCompatibleClient(value.client)) {
         throw configurationError(
           resolvedName,
-          "client must expose callable getVersion, listModels, and chat methods",
+          "client must expose callable getVersion, listModels, chat, and chatStream methods",
         );
       }
       this.client = value.client;
@@ -187,6 +194,75 @@ export class OllamaLLMProvider implements LLMProvider {
       throw mapOllamaClientError(this.metadata.name, error);
     }
   }
+
+  async *stream(request: LLMGenerationRequest): AsyncIterable<LLMStreamEvent> {
+    validateLLMGenerationRequest(request);
+    throwIfProviderRequestAborted(this.metadata.name, request.request);
+    const mapped = mapGenerationRequest(request);
+    let model: string | undefined;
+    let content = "";
+    let completed = false;
+
+    try {
+      for await (const chunk of this.client.chatStream(
+        mapped.request,
+        mapped.options,
+      )) {
+        if (completed) {
+          throw streamResponseError(
+            this.metadata.name,
+            "received data after stream completion",
+          );
+        }
+        if (chunk.model !== undefined) {
+          if (model !== undefined && chunk.model !== model) {
+            throw streamResponseError(
+              this.metadata.name,
+              "received conflicting model names",
+            );
+          }
+          model = chunk.model;
+        }
+        const resolvedModel = model ?? request.model;
+        const delta = chunk.message?.content;
+        if (delta !== undefined && delta.length > 0) {
+          content += delta;
+          yield Object.freeze({
+            type: "delta",
+            model: resolvedModel,
+            delta,
+          });
+        }
+        if (chunk.done) {
+          completed = true;
+          const response = mapGenerationResponse({
+            model: resolvedModel,
+            message: { role: "assistant", content },
+            done: true,
+            ...(chunk.doneReason === undefined
+              ? {}
+              : { doneReason: chunk.doneReason }),
+            ...(chunk.promptEvalCount === undefined
+              ? {}
+              : { promptEvalCount: chunk.promptEvalCount }),
+            ...(chunk.evalCount === undefined
+              ? {}
+              : { evalCount: chunk.evalCount }),
+          });
+          yield Object.freeze({ type: "completed", response });
+        }
+      }
+      if (!completed) {
+        throw streamResponseError(
+          this.metadata.name,
+          "stream ended before completion",
+        );
+      }
+    } catch (error) {
+      if (error instanceof ProviderError) throw error;
+      throw mapOllamaClientError(this.metadata.name, error);
+    }
+  }
 }
 
 function validateOptionsObject(
@@ -212,7 +288,18 @@ function isCompatibleClient(value: unknown): value is CompatibleOllamaClient {
     isRecord(value) &&
     typeof value.getVersion === "function" &&
     typeof value.listModels === "function" &&
-    typeof value.chat === "function"
+    typeof value.chat === "function" &&
+    typeof value.chatStream === "function"
+  );
+}
+
+function streamResponseError(
+  providerName: string,
+  detail: string,
+): ProviderRequestError {
+  return new ProviderRequestError(
+    providerName,
+    `Provider "${resolveProviderName(providerName)}" ${detail}.`,
   );
 }
 

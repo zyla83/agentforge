@@ -88,6 +88,10 @@ describe("OllamaLLMProvider server-only health", () => {
       async chat() {
         throw new Error("unused");
       },
+      async *chatStream() {
+        yield* [];
+        throw new Error("unused");
+      },
     };
     const health = await new OllamaLLMProvider({
       client: client as never,

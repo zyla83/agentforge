@@ -3,6 +3,7 @@ import type {
   OllamaChatOptions,
   OllamaChatRequest,
   OllamaChatResponse,
+  OllamaChatStreamChunk,
 } from "./OllamaChat.js";
 import type {
   FetchImplementation,
@@ -20,6 +21,7 @@ import { OllamaResponseError } from "./errors/OllamaResponseError.js";
 import { OllamaTimeoutError } from "./errors/OllamaTimeoutError.js";
 import { createCombinedAbortSignal } from "./internal/createCombinedAbortSignal.js";
 import { parseJsonResponse } from "./internal/parseJsonResponse.js";
+import { parseNdjsonStream } from "./internal/parseNdjsonStream.js";
 
 const DEFAULT_BASE_URL = "http://localhost:11434";
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -99,12 +101,118 @@ export class OllamaClient {
           Accept: "application/json",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(createChatBody(request)),
+        body: JSON.stringify(createChatBody(request, false)),
       },
       options,
     );
 
     return parseChatResponse(value, endpoint);
+  }
+
+  async *chatStream(
+    request: OllamaChatRequest,
+    options?: OllamaRequestOptions,
+  ): AsyncIterable<OllamaChatStreamChunk> {
+    validateChatRequest(request);
+    const endpoint = "/api/chat";
+    const requestOptions = validateRequestOptions(options);
+    const timeoutMs = requestOptions.timeoutMs ?? this.defaultTimeoutMs;
+    const callerSignal = requestOptions.signal;
+
+    if (isSignalAborted(callerSignal)) {
+      throw new OllamaAbortError(
+        endpoint,
+        causeOptions(getAbortReason(callerSignal)),
+      );
+    }
+
+    const url = this.createEndpointUrl(endpoint);
+    const combined = createCombinedAbortSignal(callerSignal, timeoutMs);
+    try {
+      const fetchImplementation = this.fetchImplementation;
+      const response = await fetchImplementation(url, {
+        method: "POST",
+        headers: {
+          Accept: "application/x-ndjson",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(createChatBody(request, true)),
+        signal: combined.signal,
+      });
+
+      if (!response.ok) {
+        const serverMessage = await readHttpErrorMessage(response);
+        throw new OllamaHttpError(
+          endpoint,
+          response.status,
+          response.statusText,
+          serverMessage,
+        );
+      }
+      const contentType = response.headers.get("Content-Type");
+      if (
+        contentType === null ||
+        contentType.split(";", 1)[0]?.trim().toLowerCase() !==
+          "application/x-ndjson"
+      ) {
+        throw new OllamaResponseError(endpoint, [
+          "content-type: must be application/x-ndjson",
+        ]);
+      }
+      if (response.body === null) {
+        throw new OllamaResponseError(endpoint, [
+          "body: streaming response body is required",
+        ]);
+      }
+
+      let completed = false;
+      for await (const parsed of parseNdjsonStream(response.body, endpoint)) {
+        if (completed) {
+          throw new OllamaResponseError(endpoint, [
+            `stream[${parsed.index}]: data is not allowed after completion`,
+          ]);
+        }
+        if (isRecord(parsed.value) && "error" in parsed.value) {
+          if (typeof parsed.value.error !== "string") {
+            throw new OllamaResponseError(endpoint, [
+              `stream[${parsed.index}].error: must be a string`,
+            ]);
+          }
+          throw new OllamaHttpError(
+            endpoint,
+            response.status,
+            response.statusText,
+            parsed.value.error,
+          );
+        }
+        const chunk = parseChatStreamChunk(
+          parsed.value,
+          endpoint,
+          parsed.index,
+        );
+        if (chunk.done) completed = true;
+        yield chunk;
+      }
+      if (!completed) {
+        throw new OllamaResponseError(endpoint, [
+          "stream: ended before a completed chunk",
+        ]);
+      }
+    } catch (error) {
+      if (isSignalAborted(callerSignal)) {
+        throw new OllamaAbortError(
+          endpoint,
+          causeOptions(getAbortReason(callerSignal)),
+        );
+      }
+      if (combined.didTimeout()) {
+        throw new OllamaTimeoutError(endpoint, timeoutMs, { cause: error });
+      }
+      if (error instanceof OllamaClientError) throw error;
+      throw new OllamaConnectionError(this.baseUrl, { cause: error });
+    } finally {
+      combined.cleanup();
+    }
   }
 
   private async requestJson(
@@ -331,11 +439,14 @@ function validateChatOptions(value: unknown, details: string[]): void {
   }
 }
 
-function createChatBody(request: OllamaChatRequest): Record<string, unknown> {
+function createChatBody(
+  request: OllamaChatRequest,
+  stream: boolean,
+): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: request.model,
     messages: request.messages.map(({ role, content }) => ({ role, content })),
-    stream: false,
+    stream,
   };
 
   if (request.options !== undefined) {
@@ -529,6 +640,74 @@ function parseChatResponse(
   }
   if (typeof value.eval_count === "number") result.evalCount = value.eval_count;
   return Object.freeze(result);
+}
+
+function parseChatStreamChunk(
+  value: unknown,
+  endpoint: string,
+  index: number,
+): OllamaChatStreamChunk {
+  if (!isRecord(value)) {
+    throw new OllamaResponseError(endpoint, [
+      `stream[${index}]: must be an object`,
+    ]);
+  }
+
+  const path = `stream[${index}]`;
+  const details: string[] = [];
+  if (value.model !== undefined && !isNonEmptyString(value.model)) {
+    details.push(`${path}.model: must be a non-empty string`);
+  }
+  if (value.message !== undefined) {
+    if (!isRecord(value.message)) {
+      details.push(`${path}.message: must be an object`);
+    } else {
+      if (
+        typeof value.message.role !== "string" ||
+        !CHAT_ROLES.has(value.message.role)
+      ) {
+        details.push(`${path}.message.role: unsupported role`);
+      }
+      if (typeof value.message.content !== "string") {
+        details.push(`${path}.message.content: must be a string`);
+      }
+    }
+  }
+  if (typeof value.done !== "boolean") {
+    details.push(`${path}.done: must be a boolean`);
+  }
+  validateOptionalString(value.done_reason, `${path}.done_reason`, details);
+  validateOptionalCount(
+    value.prompt_eval_count,
+    `${path}.prompt_eval_count`,
+    details,
+  );
+  validateOptionalCount(value.eval_count, `${path}.eval_count`, details);
+  if (details.length > 0) throw new OllamaResponseError(endpoint, details);
+
+  const chunk: {
+    model?: string;
+    message?: Readonly<OllamaChatMessage>;
+    done: boolean;
+    doneReason?: string;
+    promptEvalCount?: number;
+    evalCount?: number;
+  } = { done: value.done as boolean };
+  if (typeof value.model === "string") chunk.model = value.model;
+  if (isRecord(value.message)) {
+    chunk.message = Object.freeze({
+      role: value.message.role as OllamaChatMessage["role"],
+      content: value.message.content as string,
+    });
+  }
+  if (typeof value.done_reason === "string") {
+    chunk.doneReason = value.done_reason;
+  }
+  if (typeof value.prompt_eval_count === "number") {
+    chunk.promptEvalCount = value.prompt_eval_count;
+  }
+  if (typeof value.eval_count === "number") chunk.evalCount = value.eval_count;
+  return Object.freeze(chunk);
 }
 
 async function readHttpErrorMessage(
