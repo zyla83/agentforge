@@ -125,3 +125,19 @@ agent.register(examplePlugin);
 await agent.start();
 await agent.stop();
 ```
+
+## Inspecting registered plugins
+
+The registry exposes validated metadata snapshots without exposing plugin
+instances or mutable internal collections.
+
+```ts
+agent.hasPlugin("example");
+
+const metadata = agent.getPluginMetadata("example");
+
+const plugins = agent.getRegisteredPlugins();
+```
+
+Lookups are exact and case-sensitive. The returned list is read-only, preserves
+registration order, and is available throughout the framework lifecycle.

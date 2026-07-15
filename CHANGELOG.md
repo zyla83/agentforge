@@ -17,3 +17,4 @@
 - Framework and plugin-specific child loggers with custom logger support
 - Structured plugin metadata with Semantic Versioning validation
 - Registration-time metadata snapshots and plugin versions in logger bindings
+- Exact plugin lookup, registration checks, and ordered read-only metadata listing

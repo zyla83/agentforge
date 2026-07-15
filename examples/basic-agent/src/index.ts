@@ -39,6 +39,11 @@ async function main(): Promise<void> {
     .register(createExamplePlugin("database", "1.0.0"))
     .register(createExamplePlugin("assistant", "1.0.0"));
 
+  console.log("Registered plugins:");
+  for (const metadata of agent.getRegisteredPlugins()) {
+    console.log(`- ${metadata.name}@${metadata.version}`);
+  }
+
   console.log("Starting AgentForge...");
   await agent.start();
   console.log(`AgentForge state: ${agent.getState()}`);

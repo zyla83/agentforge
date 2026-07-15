@@ -36,7 +36,7 @@ export class AgentForge {
   private readonly config: Readonly<AgentForgeConfig>;
   private readonly logger: Logger;
   private readonly plugins: RegisteredPlugin[] = [];
-  private readonly pluginNames = new Set<string>();
+  private readonly pluginsByName = new Map<string, RegisteredPlugin>();
   private readonly initializedPlugins: InitializedPlugin[] = [];
   private state = AgentForgeState.Created;
 
@@ -52,12 +52,13 @@ export class AgentForge {
     this.assertState("register a plugin", AgentForgeState.Created);
     const metadata = snapshotPluginMetadata(plugin);
 
-    if (this.pluginNames.has(metadata.name)) {
+    if (this.pluginsByName.has(metadata.name)) {
       throw new DuplicatePluginError(metadata.name);
     }
 
-    this.plugins.push({ plugin, metadata });
-    this.pluginNames.add(metadata.name);
+    const registeredPlugin = { plugin, metadata };
+    this.plugins.push(registeredPlugin);
+    this.pluginsByName.set(metadata.name, registeredPlugin);
 
     return this;
   }
@@ -145,6 +146,22 @@ export class AgentForge {
 
   getPluginCount(): number {
     return this.plugins.length;
+  }
+
+  hasPlugin(name: string): boolean {
+    return typeof name === "string" && this.pluginsByName.has(name);
+  }
+
+  getPluginMetadata(name: string): Readonly<PluginMetadata> | undefined {
+    if (typeof name !== "string") {
+      return undefined;
+    }
+
+    return this.pluginsByName.get(name)?.metadata;
+  }
+
+  getRegisteredPlugins(): readonly Readonly<PluginMetadata>[] {
+    return Object.freeze(this.plugins.map(({ metadata }) => metadata));
   }
 
   private assertState(operation: string, expectedState: AgentForgeState): void {
