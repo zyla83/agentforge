@@ -13,3 +13,4 @@ export {
 } from "./ProviderRequestOptions.js";
 export type { ProviderRequestOptions } from "./ProviderRequestOptions.js";
 export * from "./errors/index.js";
+export * from "./llm/index.js";

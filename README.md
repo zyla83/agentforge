@@ -122,6 +122,57 @@ class ExampleProvider implements Provider {
 
 Provider registration in `AgentForge` is not yet implemented.
 
+## LLM provider contract
+
+LLM providers accept conversation messages with `system`, `user`, and
+`assistant` roles. Generation requests support temperature, top-p, token limit,
+stop sequences, timeouts, and cancellation signals. Each call returns one
+complete, non-streaming response. Use `validateLLMGenerationRequest()` to
+validate requests received from runtime callers.
+
+```ts
+import {
+  LLMFinishReason,
+  LLMMessageRole,
+  healthyProvider,
+  validateLLMGenerationRequest,
+  type LLMGenerationRequest,
+  type LLMGenerationResponse,
+  type LLMProvider,
+  type ProviderHealth,
+} from "@agentforge/provider-sdk";
+
+class ExampleLLMProvider implements LLMProvider {
+  readonly metadata = {
+    name: "example-llm",
+    version: "1.0.0",
+  };
+
+  async checkHealth(): Promise<ProviderHealth> {
+    return healthyProvider();
+  }
+
+  async generate(
+    request: LLMGenerationRequest,
+  ): Promise<LLMGenerationResponse> {
+    validateLLMGenerationRequest(request);
+
+    return {
+      model: request.model,
+      message: {
+        role: LLMMessageRole.Assistant,
+        content: "Example response",
+      },
+      finishReason: LLMFinishReason.Stop,
+    };
+  }
+}
+```
+
+No concrete LLM provider exists yet. Ollama support will be implemented
+separately. Streaming and tool calling are not implemented, and providers still
+cannot be registered in `AgentForge`.
+
 ## Plugin lifecycle
 
 Plugins are registered before the framework starts. AgentForge initializes them

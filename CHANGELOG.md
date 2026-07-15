@@ -22,3 +22,6 @@
 - Immutable provider health results and status helpers
 - Provider request options with timeout validation and native abort checks
 - Provider-specific error hierarchy with cause preservation
+- Provider-independent `LLMProvider` contract with conversation message roles
+- LLM generation requests, responses, parameters, and immutable token usage
+- Deterministic runtime validation with aggregated LLM request details
