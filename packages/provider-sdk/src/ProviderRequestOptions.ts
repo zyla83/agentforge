@@ -1,4 +1,7 @@
+import { resolveProviderName } from "./errors/ProviderError.js";
 import { ProviderAbortError, ProviderRequestError } from "./errors/index.js";
+
+const SDK_PROVIDER_NAME = resolveProviderName("");
 
 export interface ProviderRequestOptions {
   readonly signal?: AbortSignal;
@@ -21,7 +24,7 @@ export function validateProviderRequestOptions(
     timeoutMs <= 0
   ) {
     throw new ProviderRequestError(
-      "<unknown>",
+      SDK_PROVIDER_NAME,
       "Provider request timeoutMs must be a positive finite integer.",
     );
   }

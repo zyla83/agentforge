@@ -9,7 +9,9 @@ export class ProviderError extends Error {
 }
 
 export function resolveProviderName(providerName: string): string {
-  return typeof providerName === "string" && providerName.trim().length > 0
-    ? providerName
-    : "<unknown>";
+  if (typeof providerName !== "string" || providerName.trim().length === 0) {
+    return "<unknown>";
+  }
+
+  return providerName;
 }
