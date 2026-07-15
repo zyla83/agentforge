@@ -1,2 +1,6 @@
 export { OllamaLLMProvider } from "./OllamaLLMProvider.js";
-export type { OllamaLLMProviderOptions } from "./OllamaLLMProviderOptions.js";
+export type {
+  OllamaHealthCheckOptions,
+  OllamaHealthDetails,
+  OllamaLLMProviderOptions,
+} from "./OllamaLLMProviderOptions.js";

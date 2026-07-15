@@ -40,6 +40,22 @@ importers:
         specifier: 22.15.30
         version: 22.15.30
 
+  examples/ollama-agent:
+    dependencies:
+      '@agentforge/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@agentforge/provider-ollama':
+        specifier: workspace:*
+        version: link:../../packages/provider-ollama
+      '@agentforge/provider-sdk':
+        specifier: workspace:*
+        version: link:../../packages/provider-sdk
+    devDependencies:
+      '@types/node':
+        specifier: 22.15.30
+        version: 22.15.30
+
   packages/config:
     dependencies:
       '@agentforge/shared':

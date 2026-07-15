@@ -10,6 +10,7 @@
     { "path": "./packages/provider-sdk" },
     { "path": "./packages/shared" },
     { "path": "./packages/core" },
-    { "path": "./examples/basic-agent" }
+    { "path": "./examples/basic-agent" },
+    { "path": "./examples/ollama-agent" }
   ]
 }

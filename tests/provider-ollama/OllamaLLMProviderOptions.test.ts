@@ -51,6 +51,11 @@ describe("OllamaLLMProvider options", () => {
     await expect(provider.checkHealth()).resolves.toEqual({
       status: ProviderHealthStatus.Healthy,
       message: "Ollama 1.2.3 is available.",
+      details: {
+        serverAvailable: true,
+        version: "1.2.3",
+        baseUrl: "http://localhost:11434",
+      },
     });
     expect(fetch).toHaveBeenCalledOnce();
   });
@@ -81,14 +86,17 @@ describe("OllamaLLMProvider options", () => {
     },
   );
 
-  it.each([{}, { getVersion() {} }, { chat() {} }, null])(
-    "rejects malformed injected client %#",
-    (client) => {
-      expect(() => new OllamaLLMProvider({ client: client as never })).toThrow(
-        ProviderRequestError,
-      );
-    },
-  );
+  it.each([
+    {},
+    { listModels() {}, chat() {} },
+    { getVersion() {}, chat() {} },
+    { getVersion() {}, listModels() {} },
+    null,
+  ])("rejects malformed injected client %#", (client) => {
+    expect(() => new OllamaLLMProvider({ client: client as never })).toThrow(
+      ProviderRequestError,
+    );
+  });
 
   it("maps malformed clientOptions to provider configuration error", () => {
     expect(
@@ -112,5 +120,97 @@ describe("OllamaLLMProvider options", () => {
     new OllamaLLMProvider(options);
     expect(options).toEqual(before);
     expect(options.client).toBe(client);
+  });
+
+  it("accepts absent or empty health-check configuration", async () => {
+    const client = new FakeOllamaClient();
+    const withoutHealthCheck = new OllamaLLMProvider({
+      client: asOllamaClient(client),
+    });
+    const withEmptyHealthCheck = new OllamaLLMProvider({
+      client: asOllamaClient(client),
+      healthCheck: {},
+    });
+    await withoutHealthCheck.checkHealth();
+    await withEmptyHealthCheck.checkHealth();
+    expect(client.modelCalls).toEqual([]);
+  });
+
+  it("preserves and snapshots the configured model", async () => {
+    const client = new FakeOllamaClient();
+    client.modelResult = [{ name: " model ", model: "other" }];
+    const healthCheck = { model: " model " };
+    const provider = new OllamaLLMProvider({
+      client: asOllamaClient(client),
+      healthCheck,
+    });
+    healthCheck.model = "changed";
+
+    const health = await provider.checkHealth();
+
+    expect(health.details).toMatchObject({
+      requiredModel: " model ",
+      modelAvailable: true,
+    });
+  });
+
+  it.each([null, [], "health", 42])(
+    "rejects malformed healthCheck %#",
+    (healthCheck) => {
+      expect(
+        () => new OllamaLLMProvider({ healthCheck: healthCheck as never }),
+      ).toThrow(ProviderRequestError);
+    },
+  );
+
+  it.each([42, "", "   "])("rejects malformed health model %#", (model) => {
+    expect(
+      () => new OllamaLLMProvider({ healthCheck: { model: model as string } }),
+    ).toThrowError(
+      expect.objectContaining({
+        message:
+          'Provider "ollama" configuration is invalid: healthCheck.model must be a non-empty string.',
+      }),
+    );
+  });
+
+  it("performs no client calls during construction", () => {
+    const client = new FakeOllamaClient();
+    new OllamaLLMProvider({
+      client: asOllamaClient(client),
+      healthCheck: { model: "llama3.1:8b" },
+    });
+    expect(client.versionCalls).toEqual([]);
+    expect(client.modelCalls).toEqual([]);
+    expect(client.chatCalls).toEqual([]);
+  });
+
+  it("accepts a compatible client without getBaseUrl", () => {
+    const client = {
+      async getVersion() {
+        return { version: "1.0.0" };
+      },
+      async listModels() {
+        return [];
+      },
+      async chat() {
+        return {
+          model: "model",
+          message: { role: "assistant" as const, content: "response" },
+          done: true,
+        };
+      },
+    };
+    expect(
+      () => new OllamaLLMProvider({ client: client as never }),
+    ).not.toThrow();
+  });
+
+  it("ignores malformed optional getBaseUrl during construction", () => {
+    const client = new FakeOllamaClient() as unknown as Record<string, unknown>;
+    client.getBaseUrl = 42;
+    expect(
+      () => new OllamaLLMProvider({ client: client as never }),
+    ).not.toThrow();
   });
 });

@@ -34,3 +34,5 @@
 - Ollama request timeouts, `AbortSignal` cancellation, and structured transport errors
 - `@agentforge/provider-ollama` package with AgentForge-to-Ollama request mapping
 - Ollama response, finish-reason, token-usage, provider-error, and health-check mapping
+- Model-aware Ollama health checks with immutable structured details
+- Degraded health status for missing required models and an optional live Ollama example

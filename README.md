@@ -46,6 +46,7 @@ shutdown.
 - `packages/provider-sdk` - base contracts for external capability providers
 - `packages/shared` - shared framework utilities
 - `examples/basic-agent` - runnable plugin lifecycle example
+- `examples/ollama-agent` - optional live Ollama health and generation example
 - `tests` - repository-level tests
 
 ## Current state
@@ -276,6 +277,45 @@ options, while timeout and cancellation use provider request options. Transport
 errors are converted to provider SDK errors. Registration does not perform a
 health check or download models automatically; streaming, tool calling, and
 automatic retries are not implemented.
+
+Configure a model-aware health check when readiness requires a specific local
+model:
+
+```ts
+const provider = new OllamaLLMProvider({
+  clientOptions: {
+    baseUrl: "http://localhost:11434",
+  },
+  healthCheck: {
+    model: "llama3.1:8b",
+  },
+});
+
+const health = await provider.checkHealth({
+  timeoutMs: 5_000,
+});
+```
+
+Without `healthCheck.model`, only `/api/version` is checked. With a model, the
+provider also checks `/api/tags`: an exact, case-sensitive match is healthy, a
+missing model is degraded, and an unreachable server is unavailable. Health
+checks are explicit and are not triggered by registration. Models are never
+downloaded automatically.
+
+Run the optional live example after installing Ollama and the configured model:
+
+```bash
+pnpm example:ollama
+```
+
+Override its defaults with environment variables when needed:
+
+```bash
+OLLAMA_BASE_URL=http://localhost:11434 OLLAMA_MODEL=llama3.1:8b pnpm example:ollama
+```
+
+The model must already be installed locally. Missing-model API responses are
+commonly HTTP `404`; Ollama API errors use a JSON `error` property.
 
 ## Registering LLM providers
 

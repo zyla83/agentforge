@@ -10,11 +10,13 @@ import {
 import type {
   OllamaChatRequest,
   OllamaChatResponse,
+  OllamaModel,
   OllamaRequestOptions,
   OllamaVersion,
 } from "@agentforge/ollama-client";
 import {
   ProviderRequestError,
+  degradedProvider,
   healthyProvider,
   throwIfProviderRequestAborted,
   unavailableProvider,
@@ -29,7 +31,11 @@ import type {
   ProviderMetadata,
   ProviderRequestOptions,
 } from "@agentforge/provider-sdk";
-import type { OllamaLLMProviderOptions } from "./OllamaLLMProviderOptions.js";
+import type {
+  OllamaHealthCheckOptions,
+  OllamaHealthDetails,
+  OllamaLLMProviderOptions,
+} from "./OllamaLLMProviderOptions.js";
 import { mapOllamaClientError } from "./errors/mapOllamaClientError.js";
 import {
   mapGenerationRequest,
@@ -40,18 +46,23 @@ import { mapGenerationResponse } from "./internal/mapGenerationResponse.js";
 const DEFAULT_NAME = "ollama";
 const DEFAULT_VERSION = "1.0.0";
 const DEFAULT_DESCRIPTION = "Local Ollama large language model provider.";
+type OllamaHealthDetailRecord = OllamaHealthDetails &
+  Readonly<Record<string, unknown>>;
 
 interface CompatibleOllamaClient {
   getVersion(options?: OllamaRequestOptions): Promise<OllamaVersion>;
+  listModels(options?: OllamaRequestOptions): Promise<readonly OllamaModel[]>;
   chat(
     request: OllamaChatRequest,
     options?: OllamaRequestOptions,
   ): Promise<OllamaChatResponse>;
+  getBaseUrl?(): string;
 }
 
 export class OllamaLLMProvider implements LLMProvider {
   readonly metadata: Readonly<ProviderMetadata>;
   private readonly client: CompatibleOllamaClient;
+  private readonly healthCheck: Readonly<OllamaHealthCheckOptions> | undefined;
 
   constructor(options?: OllamaLLMProviderOptions) {
     const value = validateOptionsObject(options);
@@ -59,6 +70,7 @@ export class OllamaLLMProvider implements LLMProvider {
     const version = readOption(value, "version", DEFAULT_VERSION);
     const description = readOption(value, "description", DEFAULT_DESCRIPTION);
     const resolvedName = resolveProviderName(name);
+    this.healthCheck = snapshotHealthCheck(value.healthCheck, resolvedName);
 
     if (value.client !== undefined && value.clientOptions !== undefined) {
       throw configurationError(
@@ -71,7 +83,7 @@ export class OllamaLLMProvider implements LLMProvider {
       if (!isCompatibleClient(value.client)) {
         throw configurationError(
           resolvedName,
-          "client must expose callable getVersion and chat methods",
+          "client must expose callable getVersion, listModels, and chat methods",
         );
       }
       this.client = value.client;
@@ -100,17 +112,51 @@ export class OllamaLLMProvider implements LLMProvider {
     validateProviderRequestOptions(options);
     validateHealthRequestOptions(this.metadata.name, options);
     throwIfProviderRequestAborted(this.metadata.name, options);
+    const requestOptions = mapRequestOptions(options);
+    const baseUrl = readSafeBaseUrl(this.client);
+    const requiredModel = this.healthCheck?.model;
 
     try {
-      const version = await this.client.getVersion(mapRequestOptions(options));
-      return healthyProvider(`Ollama ${version.version} is available.`);
+      const version = await this.client.getVersion(requestOptions);
+      if (requiredModel === undefined) {
+        return healthyProvider(
+          `Ollama ${version.version} is available.`,
+          createAvailableDetails(version.version, baseUrl),
+        );
+      }
+
+      const models = await this.client.listModels(requestOptions);
+      const modelAvailable = models.some(
+        (model) =>
+          model.name === requiredModel || model.model === requiredModel,
+      );
+      const details = createModelDetails(
+        version.version,
+        requiredModel,
+        modelAvailable,
+        models.length,
+        baseUrl,
+      );
+      if (modelAvailable) {
+        return healthyProvider(
+          `Ollama ${version.version} is available and model "${requiredModel}" is installed.`,
+          details,
+        );
+      }
+      return degradedProvider(
+        `Ollama is available, but model "${requiredModel}" is not installed.`,
+        details,
+      );
     } catch (error) {
       if (
         error instanceof OllamaConnectionError ||
         error instanceof OllamaHttpError ||
         error instanceof OllamaResponseError
       ) {
-        return unavailableProvider("Ollama is unavailable.");
+        return unavailableProvider(
+          "Ollama is unavailable.",
+          createUnavailableDetails(requiredModel, baseUrl),
+        );
       }
       if (
         error instanceof OllamaAbortError ||
@@ -165,8 +211,110 @@ function isCompatibleClient(value: unknown): value is CompatibleOllamaClient {
   return (
     isRecord(value) &&
     typeof value.getVersion === "function" &&
+    typeof value.listModels === "function" &&
     typeof value.chat === "function"
   );
+}
+
+function snapshotHealthCheck(
+  value: unknown,
+  providerName: string,
+): Readonly<OllamaHealthCheckOptions> | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    throw configurationError(providerName, "healthCheck must be an object");
+  }
+  if (
+    value.model !== undefined &&
+    (typeof value.model !== "string" || value.model.trim().length === 0)
+  ) {
+    throw configurationError(
+      providerName,
+      "healthCheck.model must be a non-empty string",
+    );
+  }
+  const snapshot: { model?: string } = {};
+  if (typeof value.model === "string") snapshot.model = value.model;
+  return Object.freeze(snapshot);
+}
+
+function readSafeBaseUrl(client: CompatibleOllamaClient): string | undefined {
+  try {
+    const getBaseUrl = client.getBaseUrl;
+    if (typeof getBaseUrl !== "function") return undefined;
+    const value: unknown = getBaseUrl.call(client);
+    if (typeof value !== "string" || value.trim().length === 0) {
+      return undefined;
+    }
+    try {
+      const parsed = new URL(value);
+      if (
+        parsed.username.length > 0 ||
+        parsed.password.length > 0 ||
+        parsed.search.length > 0 ||
+        parsed.hash.length > 0
+      ) {
+        return undefined;
+      }
+    } catch {
+      // Compatible clients may report non-URL identifiers; only URL secrets are filtered.
+    }
+    return value;
+  } catch {
+    return undefined;
+  }
+}
+
+function createAvailableDetails(
+  version: string,
+  baseUrl: string | undefined,
+): OllamaHealthDetailRecord {
+  const details: {
+    serverAvailable: true;
+    version: string;
+    baseUrl?: string;
+  } = { serverAvailable: true, version };
+  if (baseUrl !== undefined) details.baseUrl = baseUrl;
+  return details as OllamaHealthDetailRecord;
+}
+
+function createModelDetails(
+  version: string,
+  requiredModel: string,
+  modelAvailable: boolean,
+  installedModelCount: number,
+  baseUrl: string | undefined,
+): OllamaHealthDetailRecord {
+  const details: {
+    serverAvailable: true;
+    version: string;
+    requiredModel: string;
+    modelAvailable: boolean;
+    installedModelCount: number;
+    baseUrl?: string;
+  } = {
+    serverAvailable: true,
+    version,
+    requiredModel,
+    modelAvailable,
+    installedModelCount,
+  };
+  if (baseUrl !== undefined) details.baseUrl = baseUrl;
+  return details as OllamaHealthDetailRecord;
+}
+
+function createUnavailableDetails(
+  requiredModel: string | undefined,
+  baseUrl: string | undefined,
+): OllamaHealthDetailRecord {
+  const details: {
+    serverAvailable: false;
+    requiredModel?: string;
+    baseUrl?: string;
+  } = { serverAvailable: false };
+  if (requiredModel !== undefined) details.requiredModel = requiredModel;
+  if (baseUrl !== undefined) details.baseUrl = baseUrl;
+  return details as OllamaHealthDetailRecord;
 }
 
 function configurationError(
