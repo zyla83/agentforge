@@ -94,21 +94,27 @@ const agent = new AgentForge(config, {
 
 Plugins are registered before the framework starts. AgentForge initializes them
 sequentially in registration order and shuts them down sequentially in reverse
-order. Plugin names must be non-empty and unique.
+order. Plugin metadata requires a unique, case-sensitive name and a Semantic
+Versioning 2.0.0 version. A non-empty description is optional. AgentForge
+validates and snapshots metadata during registration.
 
 ```ts
 import { AgentForge } from "@agentforge/core";
 import type { Plugin } from "@agentforge/plugin-sdk";
 
 const examplePlugin: Plugin = {
-  name: "example",
+  metadata: {
+    name: "example",
+    version: "1.0.0",
+    description: "Demonstrates the AgentForge plugin lifecycle.",
+  },
 
   async initialize(context) {
-    console.log(`Starting with AgentForge ${context.frameworkVersion}`);
+    context.logger.info("Plugin initialized");
   },
 
   async shutdown() {
-    console.log("Stopping example plugin");
+    // Release plugin resources.
   },
 };
 

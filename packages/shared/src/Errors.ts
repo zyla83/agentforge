@@ -22,6 +22,33 @@ export class InvalidPluginNameError extends AgentForgeError {
   }
 }
 
+export class InvalidPluginVersionError extends AgentForgeError {
+  readonly pluginName: string;
+  readonly pluginVersion: unknown;
+
+  constructor(pluginName: string, pluginVersion: unknown) {
+    const resolvedPluginName =
+      pluginName.trim().length > 0 ? pluginName : "<unknown>";
+
+    super(`Plugin "${resolvedPluginName}" has an invalid semantic version.`);
+    this.name = "InvalidPluginVersionError";
+    this.pluginName = resolvedPluginName;
+    this.pluginVersion = pluginVersion;
+  }
+}
+
+export class InvalidPluginDescriptionError extends AgentForgeError {
+  readonly pluginName: string;
+
+  constructor(pluginName: string) {
+    super(
+      `Plugin "${pluginName}" description must contain at least one non-whitespace character.`,
+    );
+    this.name = "InvalidPluginDescriptionError";
+    this.pluginName = pluginName;
+  }
+}
+
 export class InvalidConfigurationError extends AgentForgeError {
   readonly details: readonly string[];
 

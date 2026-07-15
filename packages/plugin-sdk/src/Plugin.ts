@@ -1,4 +1,5 @@
 import type { Logger } from "@agentforge/logger";
+import type { PluginMetadata } from "./PluginMetadata.js";
 
 export interface PluginContext {
   readonly frameworkVersion: string;
@@ -8,7 +9,7 @@ export interface PluginContext {
 }
 
 export interface Plugin {
-  readonly name: string;
+  readonly metadata: PluginMetadata;
 
   initialize(context: PluginContext): Promise<void>;
 

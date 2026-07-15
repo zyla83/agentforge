@@ -1,11 +1,15 @@
 import { AgentForge } from "@agentforge/core";
 import type { Plugin, PluginContext } from "@agentforge/plugin-sdk";
 
-function createExamplePlugin(name: string): Plugin {
+function createExamplePlugin(name: string, version: string): Plugin {
   let logger: PluginContext["logger"] | undefined;
 
   return {
-    name,
+    metadata: {
+      name,
+      version,
+      description: `Example ${name} plugin`,
+    },
 
     async initialize(context) {
       logger = context.logger;
@@ -32,8 +36,8 @@ async function main(): Promise<void> {
   });
 
   agent
-    .register(createExamplePlugin("database"))
-    .register(createExamplePlugin("assistant"));
+    .register(createExamplePlugin("database", "1.0.0"))
+    .register(createExamplePlugin("assistant", "1.0.0"));
 
   console.log("Starting AgentForge...");
   await agent.start();

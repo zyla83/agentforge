@@ -15,3 +15,5 @@
 - Per-plugin configuration values exposed through `PluginContext`
 - `@agentforge/logger` package with a default Pino implementation
 - Framework and plugin-specific child loggers with custom logger support
+- Structured plugin metadata with Semantic Versioning validation
+- Registration-time metadata snapshots and plugin versions in logger bindings

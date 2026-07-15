@@ -10,28 +10,32 @@ import {
   loadConfig,
 } from "@agentforge/config";
 import { type Logger, createLogger } from "@agentforge/logger";
-import type { Plugin } from "@agentforge/plugin-sdk";
+import type { Plugin, PluginMetadata } from "@agentforge/plugin-sdk";
 import {
   DuplicatePluginError,
   InvalidLifecycleOperationError,
-  InvalidPluginNameError,
   PluginInitializationError,
   PluginShutdownError,
   type PluginShutdownFailure,
 } from "@agentforge/shared";
 import type { AgentForgeOptions } from "./AgentForgeOptions.js";
 import { AgentForgeState } from "./AgentForgeState.js";
+import { snapshotPluginMetadata } from "./validatePluginMetadata.js";
 import { AGENTFORGE_VERSION } from "./version.js";
 
-interface InitializedPlugin {
+interface RegisteredPlugin {
   readonly plugin: Plugin;
+  readonly metadata: Readonly<PluginMetadata>;
+}
+
+interface InitializedPlugin extends RegisteredPlugin {
   readonly logger: Logger;
 }
 
 export class AgentForge {
   private readonly config: Readonly<AgentForgeConfig>;
   private readonly logger: Logger;
-  private readonly plugins: Plugin[] = [];
+  private readonly plugins: RegisteredPlugin[] = [];
   private readonly pluginNames = new Set<string>();
   private readonly initializedPlugins: InitializedPlugin[] = [];
   private state = AgentForgeState.Created;
@@ -46,17 +50,14 @@ export class AgentForge {
 
   register(plugin: Plugin): this {
     this.assertState("register a plugin", AgentForgeState.Created);
+    const metadata = snapshotPluginMetadata(plugin);
 
-    if (plugin.name.trim().length === 0) {
-      throw new InvalidPluginNameError();
+    if (this.pluginNames.has(metadata.name)) {
+      throw new DuplicatePluginError(metadata.name);
     }
 
-    if (this.pluginNames.has(plugin.name)) {
-      throw new DuplicatePluginError(plugin.name);
-    }
-
-    this.plugins.push(plugin);
-    this.pluginNames.add(plugin.name);
+    this.plugins.push({ plugin, metadata });
+    this.pluginNames.add(metadata.name);
 
     return this;
   }
@@ -68,10 +69,12 @@ export class AgentForge {
       pluginCount: this.plugins.length,
     });
 
-    for (const plugin of this.plugins) {
+    for (const registeredPlugin of this.plugins) {
+      const { plugin, metadata } = registeredPlugin;
       const pluginLogger = this.logger.child({
         component: "plugin",
-        pluginName: plugin.name,
+        pluginName: metadata.name,
+        pluginVersion: metadata.version,
       });
 
       try {
@@ -79,16 +82,19 @@ export class AgentForge {
         await plugin.initialize({
           frameworkVersion: AGENTFORGE_VERSION,
           instanceName: this.config.instanceName,
-          configuration: this.config.plugins[plugin.name],
+          configuration: this.config.plugins[metadata.name],
           logger: pluginLogger,
         });
-        this.initializedPlugins.push({ plugin, logger: pluginLogger });
+        this.initializedPlugins.push({
+          ...registeredPlugin,
+          logger: pluginLogger,
+        });
         pluginLogger.debug("Plugin initialized");
       } catch (error) {
         pluginLogger.error("Plugin initialization failed", { error });
         await this.rollbackStartup();
         this.state = AgentForgeState.Failed;
-        throw new PluginInitializationError(plugin.name, error);
+        throw new PluginInitializationError(metadata.name, error);
       }
     }
 
@@ -103,7 +109,9 @@ export class AgentForge {
 
     const failures: PluginShutdownFailure[] = [];
 
-    for (const { plugin, logger } of [...this.initializedPlugins].reverse()) {
+    for (const { plugin, metadata, logger } of [
+      ...this.initializedPlugins,
+    ].reverse()) {
       if (!plugin.shutdown) {
         continue;
       }
@@ -114,7 +122,7 @@ export class AgentForge {
         logger.debug("Plugin shut down");
       } catch (error) {
         logger.error("Plugin shutdown failed", { error });
-        failures.push({ pluginName: plugin.name, error });
+        failures.push({ pluginName: metadata.name, error });
       }
     }
 

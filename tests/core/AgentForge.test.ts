@@ -4,12 +4,18 @@ import {
   AgentForgeState,
 } from "@agentforge/core";
 import type { LogContext, LogLevel, Logger } from "@agentforge/logger";
-import type { Plugin, PluginContext } from "@agentforge/plugin-sdk";
+import type {
+  Plugin,
+  PluginContext,
+  PluginMetadata,
+} from "@agentforge/plugin-sdk";
 import {
   DuplicatePluginError,
   InvalidConfigurationError,
   InvalidLifecycleOperationError,
+  InvalidPluginDescriptionError,
   InvalidPluginNameError,
+  InvalidPluginVersionError,
   PluginInitializationError,
   PluginShutdownError,
 } from "@agentforge/shared";
@@ -89,9 +95,13 @@ class RecordingLogger implements Logger {
   }
 }
 
-function createPlugin(name: string, hooks: PluginHooks = {}): Plugin {
+function createPlugin(
+  name: string,
+  hooks: PluginHooks = {},
+  metadata: Omit<PluginMetadata, "name"> = { version: "1.0.0" },
+): Plugin {
   const plugin: Plugin = {
-    name,
+    metadata: { name, ...metadata },
     async initialize(context) {
       await hooks.initialize?.(context);
     },
@@ -108,6 +118,10 @@ function createPlugin(name: string, hooks: PluginHooks = {}): Plugin {
       await shutdown();
     },
   };
+}
+
+function asPlugin(value: unknown): Plugin {
+  return value as Plugin;
 }
 
 async function captureError(action: () => Promise<void>): Promise<unknown> {
@@ -296,10 +310,12 @@ describe("AgentForge logging", () => {
     expect(logger.childBindings).toContainEqual({
       component: "plugin",
       pluginName: "first",
+      pluginVersion: "1.0.0",
     });
     expect(logger.childBindings).toContainEqual({
       component: "plugin",
       pluginName: "second",
+      pluginVersion: "1.0.0",
     });
   });
 
@@ -433,6 +449,221 @@ describe("AgentForge logging", () => {
     await agent.stop();
 
     expect(JSON.stringify(logger.records)).not.toContain("classified-value");
+  });
+});
+
+describe("AgentForge plugin metadata", () => {
+  it("registers valid metadata", () => {
+    const agent = new AgentForge();
+
+    agent.register(createPlugin("example"));
+
+    expect(agent.getPluginCount()).toBe(1);
+  });
+
+  it("accepts an omitted description", () => {
+    expect(() =>
+      new AgentForge().register(
+        createPlugin("example", {}, { version: "1.0.0" }),
+      ),
+    ).not.toThrow();
+  });
+
+  it("accepts a non-empty description", () => {
+    expect(() =>
+      new AgentForge().register(
+        createPlugin(
+          "example",
+          {},
+          { version: "1.0.0", description: "Example plugin" },
+        ),
+      ),
+    ).not.toThrow();
+  });
+
+  it.each(["2.1.3-alpha.1", "2.1.3+build.42", "2.1.3-beta.1+build.42"])(
+    "accepts semantic version %s",
+    (version) => {
+      expect(() =>
+        new AgentForge().register(createPlugin("example", {}, { version })),
+      ).not.toThrow();
+    },
+  );
+
+  it("rejects missing metadata", () => {
+    expect(() => new AgentForge().register(asPlugin({}))).toThrow(
+      InvalidPluginNameError,
+    );
+  });
+
+  it("rejects metadata that is not an object", () => {
+    expect(() =>
+      new AgentForge().register(asPlugin({ metadata: "example" })),
+    ).toThrow(InvalidPluginNameError);
+  });
+
+  it("rejects a missing metadata name", () => {
+    expect(() =>
+      new AgentForge().register(asPlugin({ metadata: { version: "1.0.0" } })),
+    ).toThrow(InvalidPluginNameError);
+  });
+
+  it("rejects a non-string metadata name", () => {
+    expect(() =>
+      new AgentForge().register(
+        asPlugin({ metadata: { name: 42, version: "1.0.0" } }),
+      ),
+    ).toThrow(InvalidPluginNameError);
+  });
+
+  it("rejects a missing metadata version", () => {
+    expect(() =>
+      new AgentForge().register(asPlugin({ metadata: { name: "example" } })),
+    ).toThrow(InvalidPluginVersionError);
+  });
+
+  it("rejects a non-string metadata version", () => {
+    expect(() =>
+      new AgentForge().register(
+        asPlugin({ metadata: { name: "example", version: 1 } }),
+      ),
+    ).toThrow(InvalidPluginVersionError);
+  });
+
+  it.each(["", "latest", "v1.0.0", "1.0.0.0", "01.0.0", "1.0"])(
+    "rejects invalid semantic version %s",
+    (version) => {
+      expect(() =>
+        new AgentForge().register(createPlugin("example", {}, { version })),
+      ).toThrow(InvalidPluginVersionError);
+    },
+  );
+
+  it("exposes invalid version details", () => {
+    const pluginVersion = { channel: "latest" };
+    const error = (() => {
+      try {
+        new AgentForge().register(
+          asPlugin({
+            metadata: { name: "example", version: pluginVersion },
+          }),
+        );
+      } catch (caughtError) {
+        return caughtError;
+      }
+
+      throw new Error("Expected registration to throw.");
+    })();
+
+    expect(error).toMatchObject({
+      pluginName: "example",
+      pluginVersion,
+    });
+  });
+
+  it("rejects a non-string description", () => {
+    expect(() =>
+      new AgentForge().register(
+        asPlugin({
+          metadata: { name: "example", version: "1.0.0", description: 42 },
+        }),
+      ),
+    ).toThrow(InvalidPluginDescriptionError);
+  });
+
+  it.each(["", "  \t"])("rejects invalid description %j", (description) => {
+    expect(() =>
+      new AgentForge().register(
+        createPlugin("example", {}, { version: "1.0.0", description }),
+      ),
+    ).toThrow(InvalidPluginDescriptionError);
+  });
+
+  it("uses a metadata snapshot for configuration and logger bindings", async () => {
+    const metadata = {
+      name: "original",
+      version: "1.0.0",
+      description: "Original description",
+    };
+    let receivedConfiguration: unknown;
+    const plugin: Plugin = {
+      metadata,
+      async initialize(context) {
+        receivedConfiguration = context.configuration;
+      },
+    };
+    const logger = new RecordingLogger();
+    const agent = new AgentForge(
+      { plugins: { original: { enabled: true } } },
+      { logger },
+    ).register(plugin);
+
+    metadata.name = "mutated";
+    metadata.version = "9.9.9";
+    metadata.description = "Mutated description";
+    await agent.start();
+
+    expect(receivedConfiguration).toEqual({ enabled: true });
+    expect(logger.childBindings).toContainEqual({
+      component: "plugin",
+      pluginName: "original",
+      pluginVersion: "1.0.0",
+    });
+  });
+
+  it("ignores replacement of the plugin metadata object", async () => {
+    const plugin = createPlugin("original");
+    let receivedConfiguration: unknown;
+    plugin.initialize = async (context) => {
+      receivedConfiguration = context.configuration;
+    };
+    const agent = new AgentForge({
+      plugins: { original: { enabled: true } },
+    }).register(plugin);
+
+    (plugin as { metadata: PluginMetadata }).metadata = {
+      name: "replacement",
+      version: "9.9.9",
+    };
+    await agent.start();
+
+    expect(receivedConfiguration).toEqual({ enabled: true });
+  });
+
+  it("uses the snapshot name in initialization errors", async () => {
+    const metadata = { name: "original", version: "1.0.0" };
+    const plugin: Plugin = {
+      metadata,
+      async initialize() {
+        throw new Error("initialization failed");
+      },
+    };
+    const agent = new AgentForge().register(plugin);
+    metadata.name = "mutated";
+
+    const error = await captureError(() => agent.start());
+
+    expect(error).toMatchObject({ pluginName: "original" });
+  });
+
+  it("uses the snapshot name in shutdown failures", async () => {
+    const metadata = { name: "original", version: "1.0.0" };
+    const plugin: Plugin = {
+      metadata,
+      async initialize() {},
+      async shutdown() {
+        throw new Error("shutdown failed");
+      },
+    };
+    const agent = new AgentForge().register(plugin);
+    metadata.name = "mutated";
+    await agent.start();
+
+    const error = await captureError(() => agent.stop());
+
+    expect(error).toMatchObject({
+      failures: [expect.objectContaining({ pluginName: "original" })],
+    });
   });
 });
 
