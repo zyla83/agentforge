@@ -246,18 +246,15 @@ function readSafeBaseUrl(client: CompatibleOllamaClient): string | undefined {
     if (typeof value !== "string" || value.trim().length === 0) {
       return undefined;
     }
-    try {
-      const parsed = new URL(value);
-      if (
-        parsed.username.length > 0 ||
-        parsed.password.length > 0 ||
-        parsed.search.length > 0 ||
-        parsed.hash.length > 0
-      ) {
-        return undefined;
-      }
-    } catch {
-      // Compatible clients may report non-URL identifiers; only URL secrets are filtered.
+    const parsed = new URL(value);
+    if (
+      (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+      parsed.username.length > 0 ||
+      parsed.password.length > 0 ||
+      parsed.search.length > 0 ||
+      parsed.hash.length > 0
+    ) {
+      return undefined;
     }
     return value;
   } catch {

@@ -1,4 +1,5 @@
 import {
+  type FetchImplementation,
   OllamaAbortError,
   OllamaConnectionError,
   OllamaHttpError,
@@ -14,7 +15,7 @@ import {
   ProviderRequestError,
   ProviderTimeoutError,
 } from "@agentforge/provider-sdk";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { FakeOllamaClient, asOllamaClient } from "./testUtils.js";
 
 const requiredModel = "llama3.1:8b";
@@ -51,6 +52,29 @@ describe("OllamaLLMProvider server-only health", () => {
     });
     expect(Object.isFrozen(health)).toBe(true);
     expect(Object.isFrozen(health.details)).toBe(true);
+  });
+
+  it("includes a valid HTTPS base URL without rewriting it", async () => {
+    const client = new FakeOllamaClient();
+    client.baseUrlResult = "https://ollama.example.test/api-root";
+    const health = await createProvider(client, null).checkHealth();
+    expect(health.details?.baseUrl).toBe(
+      "https://ollama.example.test/api-root",
+    );
+  });
+
+  it("includes the normalized base URL from a real OllamaClient", async () => {
+    const fetch = vi.fn(
+      async () => new Response(JSON.stringify({ version: "0.12.6" })),
+    );
+    const provider = new OllamaLLMProvider({
+      clientOptions: {
+        baseUrl: "http://127.0.0.1:11434/",
+        fetch: fetch as FetchImplementation,
+      },
+    });
+    const health = await provider.checkHealth();
+    expect(health.details?.baseUrl).toBe("http://127.0.0.1:11434");
   });
 
   it("omits base URL when the client does not expose one", async () => {
@@ -93,6 +117,8 @@ describe("OllamaLLMProvider server-only health", () => {
   });
 
   it.each([
+    "not-a-valid-url",
+    "file:///tmp/ollama",
     "http://user:secret@localhost:11434",
     "http://localhost:11434?token=secret",
     "http://localhost:11434#secret",
