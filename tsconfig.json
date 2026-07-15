@@ -6,6 +6,7 @@
     { "path": "./packages/ollama-client" },
     { "path": "./packages/plugin-sdk" },
     { "path": "./packages/provider-mock" },
+    { "path": "./packages/provider-ollama" },
     { "path": "./packages/provider-sdk" },
     { "path": "./packages/shared" },
     { "path": "./packages/core" },

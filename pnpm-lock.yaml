@@ -90,6 +90,15 @@ importers:
         specifier: workspace:*
         version: link:../provider-sdk
 
+  packages/provider-ollama:
+    dependencies:
+      '@agentforge/ollama-client':
+        specifier: workspace:*
+        version: link:../ollama-client
+      '@agentforge/provider-sdk':
+        specifier: workspace:*
+        version: link:../provider-sdk
+
   packages/provider-sdk: {}
 
   packages/shared: {}

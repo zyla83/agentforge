@@ -22,6 +22,9 @@ export default defineConfig({
       "@agentforge/provider-mock": fileURLToPath(
         new URL("./packages/provider-mock/src/index.ts", import.meta.url),
       ),
+      "@agentforge/provider-ollama": fileURLToPath(
+        new URL("./packages/provider-ollama/src/index.ts", import.meta.url),
+      ),
       "@agentforge/provider-sdk": fileURLToPath(
         new URL("./packages/provider-sdk/src/index.ts", import.meta.url),
       ),

@@ -42,6 +42,7 @@ shutdown.
 - `packages/ollama-client` - low-level transport client for the Ollama REST API
 - `packages/plugin-sdk` - the public plugin contract
 - `packages/provider-mock` - deterministic in-memory LLM provider for tests and examples
+- `packages/provider-ollama` - AgentForge LLM provider backed by Ollama
 - `packages/provider-sdk` - base contracts for external capability providers
 - `packages/shared` - shared framework utilities
 - `examples/basic-agent` - runnable plugin lifecycle example
@@ -49,8 +50,9 @@ shutdown.
 
 ## Current state
 
-This release establishes the framework foundation. Provider integrations for
-Ollama, Whisper, and Piper are not implemented yet.
+This release establishes the framework foundation and non-streaming Ollama LLM
+integration. Provider integrations for Whisper and Piper are not implemented
+yet.
 
 ## Configuration
 
@@ -230,8 +232,50 @@ const response = await client.chat({
 
 Chat requests are currently non-streaming. Per-request cancellation uses
 `AbortSignal`, while connection, HTTP, response, timeout, and cancellation
-failures use transport-specific errors. This client is not yet an AgentForge
-`LLMProvider`.
+failures use transport-specific errors. This client remains the low-level
+transport used by the Ollama provider.
+
+## Ollama LLM provider
+
+Register `@agentforge/provider-ollama` when Ollama is installed and running and
+the requested model already exists locally:
+
+```ts
+import { AgentForge } from "@agentforge/core";
+import { OllamaLLMProvider } from "@agentforge/provider-ollama";
+import { LLMMessageRole } from "@agentforge/provider-sdk";
+
+const agent = new AgentForge();
+
+agent.registerLLMProvider(
+  new OllamaLLMProvider({
+    clientOptions: {
+      baseUrl: "http://localhost:11434",
+    },
+  }),
+  {
+    default: true,
+  },
+);
+
+const provider = agent.getDefaultLLMProvider();
+
+const response = await provider?.generate({
+  model: "llama3.1:8b",
+  messages: [
+    {
+      role: LLMMessageRole.User,
+      content: "Hello",
+    },
+  ],
+});
+```
+
+Generation is non-streaming. AgentForge generation settings map to Ollama
+options, while timeout and cancellation use provider request options. Transport
+errors are converted to provider SDK errors. Registration does not perform a
+health check or download models automatically; streaming, tool calling, and
+automatic retries are not implemented.
 
 ## Registering LLM providers
 

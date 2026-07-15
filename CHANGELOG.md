@@ -32,3 +32,5 @@
 - Basic example generation through the registered default mock LLM provider
 - `@agentforge/ollama-client` transport client for server version, model listing, and non-streaming chat
 - Ollama request timeouts, `AbortSignal` cancellation, and structured transport errors
+- `@agentforge/provider-ollama` package with AgentForge-to-Ollama request mapping
+- Ollama response, finish-reason, token-usage, provider-error, and health-check mapping
