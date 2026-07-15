@@ -1,4 +1,9 @@
-import { AgentForge } from "@agentforge/core";
+import {
+  AgentForge,
+  appendConversationMessage,
+  conversationToLLMMessages,
+  createConversation,
+} from "@agentforge/core";
 import type { Plugin, PluginContext } from "@agentforge/plugin-sdk";
 import { MockLLMProvider } from "@agentforge/provider-mock";
 import {
@@ -88,13 +93,23 @@ async function main(): Promise<void> {
   }
 
   const userMessage = "Hello, AgentForge!";
+  let conversation = createConversation();
+  conversation = appendConversationMessage(conversation, {
+    role: LLMMessageRole.User,
+    content: userMessage,
+  });
   const response = await defaultProvider.generate({
     model: "example-model",
-    messages: [{ role: LLMMessageRole.User, content: userMessage }],
+    messages: conversationToLLMMessages(conversation),
+  });
+  conversation = appendConversationMessage(conversation, {
+    role: LLMMessageRole.Assistant,
+    content: response.message.content,
   });
 
   console.log(`User: ${userMessage}`);
   console.log(`Assistant: ${response.message.content}`);
+  console.log(`Conversation messages: ${conversation.messages.length}`);
   console.log(`Recorded requests: ${exampleLLMProvider.getRequests().length}`);
 
   if (!isLLMStreamingProvider(defaultProvider)) {

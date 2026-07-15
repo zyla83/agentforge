@@ -1,8 +1,9 @@
 # Basic Agent Example
 
 This example demonstrates validated instance configuration, the AgentForge
-plugin lifecycle with two plugins, and deterministic complete and streaming LLM
-generation through the mock provider. Each plugin receives only its own configuration. The
+plugin lifecycle with two plugins, an immutable two-message conversation, and
+deterministic complete and streaming LLM generation through the mock provider.
+Each plugin receives only its own configuration. The
 `database` plugin initializes before `assistant`, while `assistant` shuts down
 before `database`.
 
@@ -16,6 +17,6 @@ pnpm build
 pnpm example:basic
 ```
 
-The output shows registration-order initialization, the running state, complete
-and incrementally streamed mock responses with their recorded request counts,
-reverse-order shutdown, and the stopped state.
+The output shows registration-order initialization, the running state, a manual
+conversation snapshot, complete and incrementally streamed mock responses with
+their recorded request counts, reverse-order shutdown, and the stopped state.

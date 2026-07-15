@@ -40,3 +40,6 @@
 - Deterministic mock LLM streaming with validated configurable deltas
 - Incremental Ollama NDJSON chat streaming with lifetime timeout and cancellation handling
 - Streaming Ollama provider mapping, registry examples, and live incremental output
+- Immutable conversation snapshots with generated conversation and message IDs
+- Timezone-aware conversation timestamp and chronology validation
+- Immutable message appends, provider-message conversion, and JSON-compatible serialization
