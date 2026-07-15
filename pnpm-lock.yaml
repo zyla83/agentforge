@@ -29,6 +29,9 @@ importers:
       '@agentforge/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
+      '@agentforge/provider-mock':
+        specifier: workspace:*
+        version: link:../../packages/provider-mock
       '@agentforge/provider-sdk':
         specifier: workspace:*
         version: link:../../packages/provider-sdk
@@ -75,6 +78,12 @@ importers:
       '@agentforge/logger':
         specifier: workspace:*
         version: link:../logger
+      '@agentforge/provider-sdk':
+        specifier: workspace:*
+        version: link:../provider-sdk
+
+  packages/provider-mock:
+    dependencies:
       '@agentforge/provider-sdk':
         specifier: workspace:*
         version: link:../provider-sdk

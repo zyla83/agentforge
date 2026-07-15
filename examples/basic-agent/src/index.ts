@@ -1,40 +1,14 @@
 import { AgentForge } from "@agentforge/core";
 import type { Plugin, PluginContext } from "@agentforge/plugin-sdk";
-import {
-  LLMFinishReason,
-  LLMMessageRole,
-  healthyProvider,
-} from "@agentforge/provider-sdk";
-import type {
-  LLMGenerationRequest,
-  LLMGenerationResponse,
-  LLMProvider,
-} from "@agentforge/provider-sdk";
+import { MockLLMProvider } from "@agentforge/provider-mock";
+import { LLMMessageRole } from "@agentforge/provider-sdk";
 
-const exampleLLMProvider: LLMProvider = {
-  metadata: {
-    name: "example-llm",
-    version: "1.0.0",
-    description: "Deterministic LLM provider for the basic example.",
-  },
-
-  async checkHealth() {
-    return healthyProvider("Example provider is ready.");
-  },
-
-  async generate(
-    request: LLMGenerationRequest,
-  ): Promise<LLMGenerationResponse> {
-    return {
-      model: request.model,
-      message: {
-        role: LLMMessageRole.Assistant,
-        content: "Example response",
-      },
-      finishReason: LLMFinishReason.Stop,
-    };
-  },
-};
+const exampleLLMProvider = new MockLLMProvider({
+  name: "example-llm",
+  version: "1.0.0",
+  description: "Deterministic LLM provider for the basic example.",
+  responseContent: "Hello from the AgentForge mock provider.",
+});
 
 function createExamplePlugin(
   name: string,
@@ -103,6 +77,21 @@ async function main(): Promise<void> {
   console.log("Starting AgentForge...");
   await agent.start();
   console.log(`AgentForge state: ${agent.getState()}`);
+
+  const defaultProvider = agent.getDefaultLLMProvider();
+  if (defaultProvider === undefined) {
+    throw new Error("No default LLM provider is registered.");
+  }
+
+  const userMessage = "Hello, AgentForge!";
+  const response = await defaultProvider.generate({
+    model: "example-model",
+    messages: [{ role: LLMMessageRole.User, content: userMessage }],
+  });
+
+  console.log(`User: ${userMessage}`);
+  console.log(`Assistant: ${response.message.content}`);
+  console.log(`Recorded requests: ${exampleLLMProvider.getRequests().length}`);
 
   console.log("Stopping AgentForge...");
   await agent.stop();

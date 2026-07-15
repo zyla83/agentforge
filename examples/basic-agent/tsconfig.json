@@ -11,6 +11,7 @@
   "references": [
     { "path": "../../packages/core" },
     { "path": "../../packages/plugin-sdk" },
+    { "path": "../../packages/provider-mock" },
     { "path": "../../packages/provider-sdk" }
   ]
 }

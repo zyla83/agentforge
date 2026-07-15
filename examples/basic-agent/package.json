@@ -10,6 +10,7 @@
   "dependencies": {
     "@agentforge/core": "workspace:*",
     "@agentforge/plugin-sdk": "workspace:*",
+    "@agentforge/provider-mock": "workspace:*",
     "@agentforge/provider-sdk": "workspace:*"
   },
   "devDependencies": {

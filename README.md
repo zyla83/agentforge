@@ -40,6 +40,7 @@ shutdown.
 
 - `packages/core` - the AgentForge facade and framework lifecycle
 - `packages/plugin-sdk` - the public plugin contract
+- `packages/provider-mock` - deterministic in-memory LLM provider for tests and examples
 - `packages/provider-sdk` - base contracts for external capability providers
 - `packages/shared` - shared framework utilities
 - `examples/basic-agent` - runnable plugin lifecycle example
@@ -169,8 +170,37 @@ class ExampleLLMProvider implements LLMProvider {
 }
 ```
 
-No concrete LLM provider exists yet. Ollama support will be implemented
-separately. Streaming and tool calling are not implemented.
+Production LLM integrations such as Ollama are not implemented yet. Streaming
+and tool calling are not implemented.
+
+## Mock LLM provider
+
+Use `@agentforge/provider-mock` for deterministic tests, examples, and local
+development without network access. It uses the same public SDK request
+validator as other LLM providers and records immutable request snapshots for
+later inspection.
+
+```ts
+import { MockLLMProvider } from "@agentforge/provider-mock";
+import { LLMMessageRole } from "@agentforge/provider-sdk";
+
+const provider = new MockLLMProvider({
+  responseContent: "Deterministic response",
+});
+
+const response = await provider.generate({
+  model: "test-model",
+  messages: [{ role: LLMMessageRole.User, content: "Hello" }],
+});
+
+console.log(response.message.content);
+console.log(provider.getRequests().length);
+```
+
+The mock supports configurable metadata, response content, finish reason, and
+health results. It is not intended to simulate every behavior of a real LLM
+provider, including streaming, tool calls, latency, model behavior, or network
+failures.
 
 ## Registering LLM providers
 

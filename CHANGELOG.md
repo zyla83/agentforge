@@ -27,3 +27,6 @@
 - Deterministic runtime validation with aggregated LLM request details
 - LLM provider registration with explicit default-provider selection
 - Ordered read-only LLM provider registry exposed through `PluginContext`
+- `@agentforge/provider-mock` package with deterministic LLM responses and configurable health results
+- Immutable mock request history for inspecting validated generation calls
+- Basic example generation through the registered default mock LLM provider
