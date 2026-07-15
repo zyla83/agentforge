@@ -19,10 +19,32 @@ describe("provider errors", () => {
 
   it("uses the unknown name for empty and invalid runtime names", () => {
     expect(new ProviderError("Failed.", "").providerName).toBe("<unknown>");
-    expect(new ProviderError("Failed.", "  ").providerName).toBe("<unknown>");
+    expect(new ProviderError("Failed.", " ").providerName).toBe("<unknown>");
     expect(
       new ProviderError("Failed.", 42 as unknown as string).providerName,
     ).toBe("<unknown>");
+  });
+
+  it("uses the unknown name in specialized error messages", () => {
+    const errors = [
+      {
+        error: new ProviderUnavailableError(""),
+        message: 'Provider "<unknown>" is unavailable.',
+      },
+      {
+        error: new ProviderTimeoutError(" ", 5000),
+        message: 'Provider "<unknown>" request timed out after 5000 ms.',
+      },
+      {
+        error: new ProviderAbortError(42 as unknown as string),
+        message: 'Provider "<unknown>" request was aborted.',
+      },
+    ];
+
+    for (const { error, message } of errors) {
+      expect(error.providerName).toBe("<unknown>");
+      expect(error.message).toBe(message);
+    }
   });
 
   it("creates a deterministic unavailable error", () => {
