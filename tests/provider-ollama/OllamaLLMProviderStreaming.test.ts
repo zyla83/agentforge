@@ -92,6 +92,8 @@ describe("OllamaLLMProvider streaming", () => {
       },
     ]);
     expect(events.every(Object.isFrozen)).toBe(true);
+    expect(events.filter(({ type }) => type === "completed")).toHaveLength(1);
+    expect(events.at(-1)?.type).toBe("completed");
     expect(client.chatCalls).toEqual([]);
   });
 
@@ -255,5 +257,41 @@ describe("OllamaLLMProvider streaming errors", () => {
     await expect(iterator.next()).rejects.toBeInstanceOf(
       ProviderUnavailableError,
     );
+  });
+
+  it("does not emit completion when the transport fails after its done chunk", async () => {
+    const client = new FakeOllamaClient();
+    client.streamResult = [
+      {
+        model: "llama3.1:8b",
+        message: { role: "assistant", content: "partial" },
+        done: false,
+      },
+      {
+        model: "llama3.1:8b",
+        done: true,
+        doneReason: "stop",
+      },
+    ];
+    client.streamError = new OllamaResponseError("/api/chat", [
+      "stream[2]: data is not allowed after completion",
+    ]);
+    const provider = new OllamaLLMProvider({
+      client: asOllamaClient(client),
+    });
+    const events: LLMStreamEvent[] = [];
+
+    await expect(
+      (async () => {
+        for await (const event of provider.stream(createRequest())) {
+          events.push(event);
+        }
+      })(),
+    ).rejects.toBeInstanceOf(ProviderRequestError);
+
+    expect(events).toEqual([
+      { type: "delta", model: "llama3.1:8b", delta: "partial" },
+    ]);
+    expect(events.some(({ type }) => type === "completed")).toBe(false);
   });
 });

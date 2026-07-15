@@ -201,14 +201,14 @@ export class OllamaLLMProvider implements LLMStreamingProvider {
     const mapped = mapGenerationRequest(request);
     let model: string | undefined;
     let content = "";
-    let completed = false;
+    let completedResponse: Readonly<LLMGenerationResponse> | undefined;
 
     try {
       for await (const chunk of this.client.chatStream(
         mapped.request,
         mapped.options,
       )) {
-        if (completed) {
+        if (completedResponse !== undefined) {
           throw streamResponseError(
             this.metadata.name,
             "received data after stream completion",
@@ -234,8 +234,7 @@ export class OllamaLLMProvider implements LLMStreamingProvider {
           });
         }
         if (chunk.done) {
-          completed = true;
-          const response = mapGenerationResponse({
+          completedResponse = mapGenerationResponse({
             model: resolvedModel,
             message: { role: "assistant", content },
             done: true,
@@ -249,15 +248,18 @@ export class OllamaLLMProvider implements LLMStreamingProvider {
               ? {}
               : { evalCount: chunk.evalCount }),
           });
-          yield Object.freeze({ type: "completed", response });
         }
       }
-      if (!completed) {
+      if (completedResponse === undefined) {
         throw streamResponseError(
           this.metadata.name,
           "stream ended before completion",
         );
       }
+      yield Object.freeze({
+        type: "completed",
+        response: completedResponse,
+      });
     } catch (error) {
       if (error instanceof ProviderError) throw error;
       throw mapOllamaClientError(this.metadata.name, error);
