@@ -1,0 +1,20 @@
+{
+  "name": "@agentforge/example-chat-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@agentforge/core": "workspace:*",
+    "@agentforge/provider-ollama": "workspace:*",
+    "@agentforge/provider-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.30",
+    "tsx": "^4.20.0",
+    "typescript": "5.8.3"
+  }
+}

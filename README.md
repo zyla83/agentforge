@@ -36,6 +36,34 @@ pnpm example:basic
 The basic example demonstrates ordered plugin initialization and reverse-order
 shutdown.
 
+## Interactive chat CLI
+
+The interactive example requires a local Ollama installation and keeps its
+conversation in memory only. Closing the CLI discards the conversation. The
+system prompt comes from an immutable agent profile.
+
+```bash
+ollama serve
+ollama pull llama3.1:8b
+pnpm example:chat
+```
+
+Override the model in POSIX-compatible shells:
+
+```bash
+OLLAMA_MODEL=qwen2.5:7b pnpm example:chat
+```
+
+PowerShell:
+
+```powershell
+$env:OLLAMA_MODEL = "qwen2.5:7b"
+pnpm example:chat
+```
+
+Available commands are `/help`, `/info`, `/reset`, and `/exit`. Ctrl+C during
+generation cancels the active response; Ctrl+C at the prompt exits the CLI.
+
 ## Workspace
 
 - `packages/core` - the AgentForge facade and framework lifecycle
@@ -46,6 +74,7 @@ shutdown.
 - `packages/provider-sdk` - base contracts for external capability providers
 - `packages/shared` - shared framework utilities
 - `examples/basic-agent` - runnable plugin lifecycle example
+- `examples/chat-cli` - interactive multi-turn Ollama chat application
 - `examples/ollama-agent` - optional live Ollama health and generation example
 - `tests` - repository-level tests
 

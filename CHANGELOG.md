@@ -55,3 +55,7 @@
 - Engine and per-turn signal composition with deterministic listener cleanup
 - Execution-phase abort checkpoints preventing partial assistant snapshots
 - Streaming iterator cleanup with unchanged provider abort-error propagation
+- Interactive local Ollama chat CLI with environment-based model configuration
+- In-memory multi-turn conversation history with incremental terminal streaming
+- Stable reset, help, info, exit, and quit commands
+- Active-response cancellation with graceful EOF and process-signal shutdown
