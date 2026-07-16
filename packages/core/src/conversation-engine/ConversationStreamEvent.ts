@@ -10,6 +10,7 @@ export interface ConversationStreamStartedEvent {
   readonly userMessage: Readonly<ConversationMessage>;
   readonly provider: string;
   readonly model: string;
+  readonly profile: string | undefined;
 }
 
 export interface ConversationStreamDeltaEvent {
@@ -18,6 +19,7 @@ export interface ConversationStreamDeltaEvent {
   readonly content: string;
   readonly provider: string;
   readonly model: string;
+  readonly profile: string | undefined;
 }
 
 export interface ConversationStreamCompletedEvent {
@@ -27,6 +29,8 @@ export interface ConversationStreamCompletedEvent {
   readonly assistantMessage: Readonly<ConversationMessage>;
   readonly response: Readonly<LLMGenerationResponse>;
   readonly provider: string;
+  readonly model: string;
+  readonly profile: string | undefined;
 }
 
 export type ConversationStreamEvent =

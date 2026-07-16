@@ -1,4 +1,8 @@
-import { AgentForge, createConversation } from "@agentforge/core";
+import {
+  AgentForge,
+  createAgentProfile,
+  createConversation,
+} from "@agentforge/core";
 import { OllamaLLMProvider } from "@agentforge/provider-ollama";
 import { ProviderError, ProviderHealthStatus } from "@agentforge/provider-sdk";
 
@@ -32,13 +36,19 @@ async function main(): Promise<void> {
       return;
     }
 
-    const engine = agent.createConversationEngine();
+    const profile = createAgentProfile({
+      id: "ollama-local",
+      systemPrompt: "You are a concise local AI assistant.",
+      model,
+      provider: provider.metadata.name,
+      generation: { temperature: 0.2 },
+    });
+    const engine = agent.createConversationEngine({ profile });
     process.stdout.write("Assistant: ");
     for await (const event of engine.streamTurn({
       conversation: createConversation(),
       content:
         "Reply with one short sentence confirming that AgentForge can communicate with Ollama.",
-      model,
       request: { timeoutMs: REQUEST_TIMEOUT_MS },
     })) {
       if (event.type === "delta") process.stdout.write(event.delta);

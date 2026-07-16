@@ -47,3 +47,7 @@
 - Default and named provider resolution with immutable turn results
 - Accumulated conversation stream events and defensive completion validation
 - `AgentForge.createConversationEngine()` convenience integration
+- Immutable agent profiles with reusable system prompts and optional model, provider, and generation defaults
+- Engine-level and per-turn profile selection with property-level generation merging
+- Provider-only system prompt injection excluded from conversation snapshots
+- Resolved profile and model metadata in conversation results and stream events

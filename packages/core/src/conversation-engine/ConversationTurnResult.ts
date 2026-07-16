@@ -10,4 +10,6 @@ export interface ConversationTurnResult {
   readonly assistantMessage: Readonly<ConversationMessage>;
   readonly response: Readonly<LLMGenerationResponse>;
   readonly provider: string;
+  readonly model: string;
+  readonly profile: string | undefined;
 }

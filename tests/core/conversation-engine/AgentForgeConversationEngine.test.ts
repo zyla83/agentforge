@@ -2,6 +2,7 @@ import {
   AgentForge,
   AgentForgeState,
   ConversationEngine,
+  createAgentProfile,
   createConversation,
 } from "@agentforge/core";
 import { MockLLMProvider } from "@agentforge/provider-mock";
@@ -92,5 +93,29 @@ describe("AgentForge conversation engine integration", () => {
 
     expect(result.userMessage.id).toBe("user");
     expect(result.assistantMessage.id).toBe("assistant");
+  });
+
+  it("forwards an immutable default profile to the engine", async () => {
+    const provider = new MockLLMProvider({
+      name: "profile-provider",
+      responseContent: "Response",
+    });
+    const agent = new AgentForge().registerLLMProvider(provider);
+    const result = await agent
+      .createConversationEngine({
+        profile: createAgentProfile({
+          id: "agent-profile",
+          systemPrompt: "Answer briefly.",
+          model: "profile-model",
+          provider: "profile-provider",
+        }),
+      })
+      .runTurn({ conversation, content: "Hello" });
+
+    expect(result).toMatchObject({
+      profile: "agent-profile",
+      model: "profile-model",
+      provider: "profile-provider",
+    });
   });
 });

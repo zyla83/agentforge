@@ -27,16 +27,16 @@ export function validateConversationTurnInput(
   if (!validContent) {
     details.push("content: must be a non-empty string");
   }
-  const validModel = isNonEmptyString(value.model);
+  const validModel = value.model === undefined || isNonEmptyString(value.model);
   if (!validModel) {
-    details.push("model: must be a non-empty string");
+    details.push("model: must be a non-empty string when provided");
   }
   if (value.provider !== undefined && !isNonEmptyString(value.provider)) {
     details.push("provider: must be a non-empty string when provided");
   }
 
   const providerValidation = validateProviderOptions(
-    validModel ? value.model : "validation-model",
+    isNonEmptyString(value.model) ? value.model : "validation-model",
     validContent ? value.content : "validation-content",
     value.generation,
     value.request,

@@ -1,12 +1,19 @@
 import {
   LLMMessageRole,
   isLLMStreamingProvider,
+  validateLLMGenerationRequest,
 } from "@agentforge/provider-sdk";
 import type {
+  LLMGenerationOptions,
   LLMGenerationRequest,
   LLMGenerationResponse,
+  LLMMessage,
   LLMProvider,
 } from "@agentforge/provider-sdk";
+import {
+  type AgentProfile,
+  createAgentProfile,
+} from "../agent-profile/index.js";
 import {
   appendConversationMessage,
   conversationToLLMMessages,
@@ -22,12 +29,21 @@ import {
   ConversationEngineError,
   ConversationProviderNotFoundError,
   ConversationProviderStreamingUnsupportedError,
+  InvalidConversationTurnError,
 } from "./errors/index.js";
 import { validateConversationTurnInput } from "./internal/index.js";
 
 interface ResolvedEngineOptions {
   readonly providers: ConversationProviderResolver;
   readonly conversationFactory?: Readonly<ConversationFactoryOptions>;
+  readonly profile?: Readonly<AgentProfile>;
+}
+
+interface ResolvedConversationTurn {
+  readonly profile: Readonly<AgentProfile> | undefined;
+  readonly model: string;
+  readonly provider: string | undefined;
+  readonly generation: Readonly<LLMGenerationOptions> | undefined;
 }
 
 export class ConversationEngine {
@@ -35,11 +51,13 @@ export class ConversationEngine {
   private readonly conversationFactory:
     | Readonly<ConversationFactoryOptions>
     | undefined;
+  private readonly profile: Readonly<AgentProfile> | undefined;
 
   constructor(options: ConversationEngineOptions) {
     const resolved = validateEngineOptions(options);
     this.providers = resolved.providers;
     this.conversationFactory = resolved.conversationFactory;
+    this.profile = resolved.profile;
   }
 
   async runTurn(
@@ -47,7 +65,8 @@ export class ConversationEngine {
   ): Promise<Readonly<ConversationTurnResult>> {
     validateConversationTurnInput(input);
     validateConversation(input.conversation);
-    const provider = this.resolveProvider(input.provider);
+    const resolved = this.resolveTurn(input);
+    const provider = this.resolveProvider(resolved.provider);
     const providerName = provider.metadata.name;
     const withUser = appendConversationMessage(
       input.conversation,
@@ -56,7 +75,7 @@ export class ConversationEngine {
     );
     const userMessage = getLastMessage(withUser);
     const response = await provider.generate(
-      createProviderRequest(input, withUser),
+      createProviderRequest(input, withUser, resolved),
     );
     const completedConversation = appendConversationMessage(
       withUser,
@@ -74,6 +93,8 @@ export class ConversationEngine {
       assistantMessage,
       response,
       provider: providerName,
+      model: resolved.model,
+      profile: resolved.profile?.id,
     });
   }
 
@@ -82,7 +103,8 @@ export class ConversationEngine {
   ): AsyncIterable<ConversationStreamEvent> {
     validateConversationTurnInput(input);
     validateConversation(input.conversation);
-    const provider = this.resolveProvider(input.provider);
+    const resolved = this.resolveTurn(input);
+    const provider = this.resolveProvider(resolved.provider);
     const providerName = provider.metadata.name;
     if (!isLLMStreamingProvider(provider)) {
       throw new ConversationProviderStreamingUnsupportedError(providerName);
@@ -99,14 +121,15 @@ export class ConversationEngine {
       conversation: withUser,
       userMessage,
       provider: providerName,
-      model: input.model,
+      model: resolved.model,
+      profile: resolved.profile?.id,
     });
 
     let accumulatedContent = "";
     let deltaCount = 0;
     let completedResponse: Readonly<LLMGenerationResponse> | undefined;
     for await (const event of provider.stream(
-      createProviderRequest(input, withUser),
+      createProviderRequest(input, withUser, resolved),
     )) {
       if (completedResponse !== undefined) {
         throw streamProtocolError(
@@ -135,7 +158,8 @@ export class ConversationEngine {
           delta: event.delta,
           content: accumulatedContent,
           provider: providerName,
-          model: event.model,
+          model: resolved.model,
+          profile: resolved.profile?.id,
         });
         continue;
       }
@@ -181,6 +205,28 @@ export class ConversationEngine {
       assistantMessage,
       response: completedResponse,
       provider: providerName,
+      model: resolved.model,
+      profile: resolved.profile?.id,
+    });
+  }
+
+  private resolveTurn(input: ConversationTurnInput): ResolvedConversationTurn {
+    const profile =
+      input.profile === undefined
+        ? this.profile
+        : createAgentProfile(input.profile);
+    const model = input.model ?? profile?.model;
+    if (model === undefined) {
+      throw new InvalidConversationTurnError([
+        "model: is required when no profile model is available",
+      ]);
+    }
+
+    return Object.freeze({
+      profile,
+      model,
+      provider: input.provider ?? profile?.provider,
+      generation: mergeGeneration(profile?.generation, input.generation),
     });
   }
 
@@ -218,12 +264,15 @@ function validateEngineOptions(
   const conversationFactory = snapshotConversationFactory(
     value.conversationFactory,
   );
-  return conversationFactory === undefined
-    ? { providers: value.providers as unknown as ConversationProviderResolver }
-    : {
-        providers: value.providers as unknown as ConversationProviderResolver,
-        conversationFactory,
-      };
+  const profile =
+    value.profile === undefined
+      ? undefined
+      : createAgentProfile(value.profile as never);
+  return {
+    providers: value.providers as unknown as ConversationProviderResolver,
+    ...(conversationFactory === undefined ? {} : { conversationFactory }),
+    ...(profile === undefined ? {} : { profile }),
+  };
 }
 
 function snapshotConversationFactory(
@@ -258,13 +307,50 @@ function snapshotConversationFactory(
 function createProviderRequest(
   input: ConversationTurnInput,
   conversation: Parameters<typeof conversationToLLMMessages>[0],
+  resolved: ResolvedConversationTurn,
 ): LLMGenerationRequest {
-  return {
-    model: input.model,
-    messages: conversationToLLMMessages(conversation),
-    ...(input.generation === undefined ? {} : { generation: input.generation }),
+  const request: LLMGenerationRequest = {
+    model: resolved.model,
+    messages: createProviderMessages(conversation, resolved.profile),
+    ...(resolved.generation === undefined
+      ? {}
+      : { generation: resolved.generation }),
     ...(input.request === undefined ? {} : { request: input.request }),
   };
+  validateLLMGenerationRequest(request);
+  return request;
+}
+
+function createProviderMessages(
+  conversation: Parameters<typeof conversationToLLMMessages>[0],
+  profile: Readonly<AgentProfile> | undefined,
+): readonly Readonly<LLMMessage>[] {
+  const messages = conversationToLLMMessages(conversation);
+  if (profile === undefined) return messages;
+
+  const systemMessage = Object.freeze({
+    role: LLMMessageRole.System,
+    content: profile.systemPrompt,
+  });
+  return Object.freeze([systemMessage, ...messages]);
+}
+
+function mergeGeneration(
+  profile: Readonly<LLMGenerationOptions> | undefined,
+  turn: LLMGenerationOptions | undefined,
+): Readonly<LLMGenerationOptions> | undefined {
+  if (profile === undefined && turn === undefined) return undefined;
+  const merged = { ...profile, ...turn };
+  return Object.freeze({
+    ...(merged.temperature === undefined
+      ? {}
+      : { temperature: merged.temperature }),
+    ...(merged.topP === undefined ? {} : { topP: merged.topP }),
+    ...(merged.maxTokens === undefined ? {} : { maxTokens: merged.maxTokens }),
+    ...(merged.stop === undefined
+      ? {}
+      : { stop: Object.freeze([...merged.stop]) }),
+  });
 }
 
 function getLastMessage(

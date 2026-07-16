@@ -1,4 +1,8 @@
-import { AgentForge, createConversation } from "@agentforge/core";
+import {
+  AgentForge,
+  createAgentProfile,
+  createConversation,
+} from "@agentforge/core";
 import type { Plugin, PluginContext } from "@agentforge/plugin-sdk";
 import { MockLLMProvider } from "@agentforge/provider-mock";
 
@@ -78,13 +82,19 @@ async function main(): Promise<void> {
   await agent.start();
   console.log(`AgentForge state: ${agent.getState()}`);
 
-  const engine = agent.createConversationEngine();
+  const profile = createAgentProfile({
+    id: "friendly-assistant",
+    systemPrompt: "You are a friendly and concise assistant.",
+    model: "example-model",
+    generation: { temperature: 0.2 },
+  });
+  const engine = agent.createConversationEngine({ profile });
   const result = await engine.runTurn({
     conversation: createConversation(),
     content: "Hello, AgentForge!",
-    model: "example-model",
   });
 
+  console.log(`Profile: ${result.profile ?? "none"}`);
   console.log(`User: ${result.userMessage.content}`);
   console.log(`Assistant: ${result.assistantMessage.content}`);
   console.log(`Conversation messages: ${result.conversation.messages.length}`);
@@ -94,7 +104,6 @@ async function main(): Promise<void> {
   for await (const event of engine.streamTurn({
     conversation: result.conversation,
     content: "Stream a greeting, please.",
-    model: "example-model",
   })) {
     if (event.type === "delta") process.stdout.write(event.delta);
     if (event.type === "completed") {

@@ -94,7 +94,7 @@ describe("ConversationEngine turn validation", () => {
     expect(error.details).toEqual([
       "conversation: is required",
       "content: must be a non-empty string",
-      "model: must be a non-empty string",
+      "model: must be a non-empty string when provided",
       "provider: must be a non-empty string when provided",
       "generation.temperature: must be between 0 and 2",
       "request.timeoutMs: must be a positive finite integer",

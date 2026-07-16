@@ -159,14 +159,15 @@ describe("ConversationEngine streaming", () => {
       conversation: { messages: [{ content: "Question" }] },
     });
     expect(events.slice(1, 4)).toMatchObject([
-      { delta: "Hello", content: "Hello", model: "reported-model" },
-      { delta: " ", content: "Hello ", model: "reported-model" },
-      { delta: "world", content: "Hello world", model: "reported-model" },
+      { delta: "Hello", content: "Hello", model: "requested-model" },
+      { delta: " ", content: "Hello ", model: "requested-model" },
+      { delta: "world", content: "Hello world", model: "requested-model" },
     ]);
     const completed = events.at(-1);
     expect(completed).toMatchObject({
       type: "completed",
       provider: "streaming",
+      model: "requested-model",
       assistantMessage: { id: "assistant", content: "Hello world" },
       conversation: {
         messages: [{ content: "Question" }, { content: "Hello world" }],

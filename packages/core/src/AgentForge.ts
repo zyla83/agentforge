@@ -25,6 +25,7 @@ import {
 } from "@agentforge/shared";
 import type { AgentForgeOptions } from "./AgentForgeOptions.js";
 import { AgentForgeState } from "./AgentForgeState.js";
+import type { AgentProfile } from "./agent-profile/index.js";
 import {
   type ConversationEngine,
   createConversationEngine as createConversationEngineFactory,
@@ -226,12 +227,14 @@ export class AgentForge {
 
   createConversationEngine(options?: {
     readonly conversationFactory?: ConversationFactoryOptions;
+    readonly profile?: AgentProfile;
   }): ConversationEngine {
     return createConversationEngineFactory({
       providers: this,
       ...(options?.conversationFactory === undefined
         ? {}
         : { conversationFactory: options.conversationFactory }),
+      ...(options?.profile === undefined ? {} : { profile: options.profile }),
     });
   }
 

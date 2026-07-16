@@ -190,6 +190,38 @@ The conversation model stores immutable history; the conversation engine
 orchestrates provider execution for one turn. Provider failures reject execution,
 and persistence is not included.
 
+## Agent profiles and system prompts
+
+Agent profiles are immutable, reusable execution configuration. A profile has a
+stable ID and system prompt, and may provide model, provider, and generation
+defaults.
+
+```ts
+const profile = createAgentProfile({
+  id: "concise",
+  systemPrompt: "Answer concisely.",
+  model: "llama3.1:8b",
+  provider: "ollama",
+});
+
+const engine = agent.createConversationEngine({ profile });
+const result = await engine.runTurn({
+  conversation: createConversation(),
+  content: "Explain AgentForge.",
+});
+```
+
+The profile system prompt is prepended only to provider requests and is never
+stored in conversation history. A per-turn profile fully replaces the engine
+default profile. Explicit turn model and provider values override profile
+defaults. Generation settings merge property by property, while turn stop
+sequences replace profile stop sequences instead of being concatenated.
+
+Conversations are immutable user-visible history. Agent profiles provide
+reusable execution defaults and system instructions. The conversation engine
+combines both when calling a provider. Profiles are not persisted or registered
+globally.
+
 ## LLM provider contract
 
 LLM providers accept conversation messages with `system`, `user`, and
