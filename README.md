@@ -184,6 +184,40 @@ Conversion preserves role, content, and order while removing conversation-only
 IDs and timestamps. Tests may inject deterministic ID generators and clocks into
 the factory functions. The model does not execute providers or persist data.
 
+## Conversation storage
+
+Conversation persistence is explicit and remains separate from the stateless
+conversation engine. The in-memory implementation stores deep immutable
+snapshots for the current process only; it is not durable across restarts.
+
+```ts
+import {
+  createConversation,
+  createInMemoryConversationStore,
+} from "@agentforge/core";
+
+const store = createInMemoryConversationStore();
+
+const result = await engine.runTurn({
+  conversation: createConversation(),
+  content: "Hello",
+});
+
+const saved = await store.save(result.conversation);
+const loaded = await store.require(saved.conversation.id);
+```
+
+Each successful save increments the current entry's per-conversation revision
+and records a separate `savedAt` timestamp. `get` returns `undefined` when an ID
+is absent, while `require` throws a typed not-found error. `list` provides a
+deterministic paginated view ordered by conversation update time; `delete` and
+`clear` remove entries. Saving an ID after deletion starts again at revision 1
+because historical revisions and tombstones are not retained.
+
+All loaded conversations and list results are immutable snapshots. Future
+database adapters can implement the same `ConversationStore` interface without
+changing conversation execution.
+
 ## Conversation engine
 
 The stateless conversation engine orchestrates one immutable user-to-assistant

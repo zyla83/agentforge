@@ -5,3 +5,4 @@ export * from "./version.js";
 export * from "./agent-profile/index.js";
 export * from "./conversation/index.js";
 export * from "./conversation-engine/index.js";
+export * from "./conversation-store/index.js";

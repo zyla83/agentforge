@@ -59,3 +59,6 @@
 - In-memory multi-turn conversation history with incremental terminal streaming
 - Stable reset, help, info, exit, and quit commands
 - Active-response cancellation with graceful EOF and process-signal shutdown
+- Explicit conversation storage contract separate from conversation execution
+- Deeply immutable in-memory conversation persistence with per-ID revisions and saved timestamps
+- Deterministic paginated conversation listing and typed storage errors
