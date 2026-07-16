@@ -2,21 +2,41 @@ name: CI
 
 on:
   push:
-    branches: [master, main]
+    branches:
+      - main
   pull_request:
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
+    name: Check, build and test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      CI: true
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install pnpm
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Set up pnpm
         uses: pnpm/action-setup@v4
+        with:
+          version: 11.12.0
+          run_install: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -27,11 +47,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check source
+      - name: Check formatting and lint
         run: pnpm check
 
-      - name: Build
-        run: pnpm build
-
-      - name: Test
+      - name: Build and test
         run: pnpm test
+
+      - name: Run basic example
+        run: pnpm example:basic
