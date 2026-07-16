@@ -2,7 +2,8 @@
 
 This example demonstrates validated instance configuration, the AgentForge
 plugin lifecycle with two plugins, stateless complete and streaming conversation
-turns, an immutable agent profile with a reusable system prompt, and
+turns, deterministic turn cancellation, an immutable agent profile with a
+reusable system prompt, and
 deterministic LLM generation through the mock provider. Each plugin
 receives only its own configuration. The
 `database` plugin initializes before `assistant`, while `assistant` shuts down
@@ -21,4 +22,5 @@ pnpm example:basic
 The output shows registration-order initialization, the running state, an
 immutable completed conversation, an incrementally streamed turn, their recorded
 request counts, the selected profile without storing its system prompt in the
-conversation, reverse-order shutdown, and the stopped state.
+conversation, cancellation before a provider call, reverse-order shutdown, and
+the stopped state.

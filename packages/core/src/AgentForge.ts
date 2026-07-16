@@ -228,6 +228,7 @@ export class AgentForge {
   createConversationEngine(options?: {
     readonly conversationFactory?: ConversationFactoryOptions;
     readonly profile?: AgentProfile;
+    readonly signal?: AbortSignal;
   }): ConversationEngine {
     return createConversationEngineFactory({
       providers: this,
@@ -235,6 +236,7 @@ export class AgentForge {
         ? {}
         : { conversationFactory: options.conversationFactory }),
       ...(options?.profile === undefined ? {} : { profile: options.profile }),
+      ...(options?.signal === undefined ? {} : { signal: options.signal }),
     });
   }
 

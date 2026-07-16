@@ -51,3 +51,7 @@
 - Engine-level and per-turn profile selection with property-level generation merging
 - Provider-only system prompt injection excluded from conversation snapshots
 - Resolved profile and model metadata in conversation results and stream events
+- Native conversation-turn cancellation with a reusable frozen controller
+- Engine and per-turn signal composition with deterministic listener cleanup
+- Execution-phase abort checkpoints preventing partial assistant snapshots
+- Streaming iterator cleanup with unchanged provider abort-error propagation

@@ -6,4 +6,5 @@ export interface ConversationEngineOptions {
   readonly providers: ConversationProviderResolver;
   readonly conversationFactory?: ConversationFactoryOptions;
   readonly profile?: AgentProfile;
+  readonly signal?: AbortSignal;
 }

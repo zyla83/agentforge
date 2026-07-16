@@ -9,6 +9,7 @@ import type {
   LLMGenerationResponse,
   LLMMessage,
   LLMProvider,
+  ProviderRequestOptions,
 } from "@agentforge/provider-sdk";
 import {
   type AgentProfile,
@@ -29,14 +30,21 @@ import {
   ConversationEngineError,
   ConversationProviderNotFoundError,
   ConversationProviderStreamingUnsupportedError,
+  ConversationTurnExecutionError,
+  ConversationTurnExecutionPhase,
   InvalidConversationTurnError,
 } from "./errors/index.js";
-import { validateConversationTurnInput } from "./internal/index.js";
+import {
+  composeAbortSignals,
+  throwIfConversationTurnAborted,
+  validateConversationTurnInput,
+} from "./internal/index.js";
 
 interface ResolvedEngineOptions {
   readonly providers: ConversationProviderResolver;
   readonly conversationFactory?: Readonly<ConversationFactoryOptions>;
   readonly profile?: Readonly<AgentProfile>;
+  readonly signal?: AbortSignal;
 }
 
 interface ResolvedConversationTurn {
@@ -52,162 +60,295 @@ export class ConversationEngine {
     | Readonly<ConversationFactoryOptions>
     | undefined;
   private readonly profile: Readonly<AgentProfile> | undefined;
+  private readonly signal: AbortSignal | undefined;
 
   constructor(options: ConversationEngineOptions) {
     const resolved = validateEngineOptions(options);
     this.providers = resolved.providers;
     this.conversationFactory = resolved.conversationFactory;
     this.profile = resolved.profile;
+    this.signal = resolved.signal;
   }
 
   async runTurn(
     input: ConversationTurnInput,
   ): Promise<Readonly<ConversationTurnResult>> {
-    validateConversationTurnInput(input);
-    validateConversation(input.conversation);
-    const resolved = this.resolveTurn(input);
-    const provider = this.resolveProvider(resolved.provider);
-    const providerName = provider.metadata.name;
-    const withUser = appendConversationMessage(
-      input.conversation,
-      { role: LLMMessageRole.User, content: input.content },
-      this.conversationFactory,
-    );
-    const userMessage = getLastMessage(withUser);
-    const response = await provider.generate(
-      createProviderRequest(input, withUser, resolved),
-    );
-    const completedConversation = appendConversationMessage(
-      withUser,
-      {
-        role: LLMMessageRole.Assistant,
-        content: response.message.content,
-      },
-      this.conversationFactory,
-    );
-    const assistantMessage = getLastMessage(completedConversation);
+    const composed = composeAbortSignals([this.signal, getTurnSignal(input)]);
+    try {
+      throwIfConversationTurnAborted(
+        composed.signal,
+        ConversationTurnExecutionPhase.Validation,
+      );
+      validateConversationTurnInput(input);
+      validateConversation(input.conversation);
+      const resolved = this.resolveTurn(input);
+      throwIfConversationTurnAborted(
+        composed.signal,
+        ConversationTurnExecutionPhase.Validation,
+      );
 
-    return Object.freeze({
-      conversation: completedConversation,
-      userMessage,
-      assistantMessage,
-      response,
-      provider: providerName,
-      model: resolved.model,
-      profile: resolved.profile?.id,
-    });
+      const provider = this.resolveProvider(resolved.provider);
+      const providerName = provider.metadata.name;
+      throwIfConversationTurnAborted(
+        composed.signal,
+        ConversationTurnExecutionPhase.ProviderResolution,
+      );
+      throwIfConversationTurnAborted(
+        composed.signal,
+        ConversationTurnExecutionPhase.UserAppend,
+      );
+      const withUser = appendConversationMessage(
+        input.conversation,
+        { role: LLMMessageRole.User, content: input.content },
+        this.conversationFactory,
+      );
+      throwIfConversationTurnAborted(
+        composed.signal,
+        ConversationTurnExecutionPhase.UserAppend,
+      );
+      const userMessage = getLastMessage(
+        withUser,
+        ConversationTurnExecutionPhase.UserAppend,
+      );
+      const request = createProviderRequest(
+        withUser,
+        resolved,
+        createEffectiveRequest(input.request, composed.signal),
+      );
+      throwIfConversationTurnAborted(
+        composed.signal,
+        ConversationTurnExecutionPhase.ProviderExecution,
+      );
+      const response = await provider.generate(request);
+      throwIfConversationTurnAborted(
+        composed.signal,
+        ConversationTurnExecutionPhase.ProviderExecution,
+      );
+      throwIfConversationTurnAborted(
+        composed.signal,
+        ConversationTurnExecutionPhase.AssistantAppend,
+      );
+      const completedConversation = appendConversationMessage(
+        withUser,
+        {
+          role: LLMMessageRole.Assistant,
+          content: response.message.content,
+        },
+        this.conversationFactory,
+      );
+      throwIfConversationTurnAborted(
+        composed.signal,
+        ConversationTurnExecutionPhase.AssistantAppend,
+      );
+      const assistantMessage = getLastMessage(
+        completedConversation,
+        ConversationTurnExecutionPhase.AssistantAppend,
+      );
+      const result = Object.freeze({
+        conversation: completedConversation,
+        userMessage,
+        assistantMessage,
+        response,
+        provider: providerName,
+        model: resolved.model,
+        profile: resolved.profile?.id,
+      });
+      throwIfConversationTurnAborted(
+        composed.signal,
+        ConversationTurnExecutionPhase.Completed,
+      );
+      return result;
+    } finally {
+      composed.dispose();
+    }
   }
 
   async *streamTurn(
     input: ConversationTurnInput,
   ): AsyncIterable<ConversationStreamEvent> {
-    validateConversationTurnInput(input);
-    validateConversation(input.conversation);
-    const resolved = this.resolveTurn(input);
-    const provider = this.resolveProvider(resolved.provider);
-    const providerName = provider.metadata.name;
-    if (!isLLMStreamingProvider(provider)) {
-      throw new ConversationProviderStreamingUnsupportedError(providerName);
-    }
+    const composed = composeAbortSignals([this.signal, getTurnSignal(input)]);
+    try {
+      throwIfConversationTurnAborted(
+        composed.signal,
+        ConversationTurnExecutionPhase.Validation,
+      );
+      validateConversationTurnInput(input);
+      validateConversation(input.conversation);
+      const resolved = this.resolveTurn(input);
+      throwIfConversationTurnAborted(
+        composed.signal,
+        ConversationTurnExecutionPhase.Validation,
+      );
+      const provider = this.resolveProvider(resolved.provider);
+      const providerName = provider.metadata.name;
+      throwIfConversationTurnAborted(
+        composed.signal,
+        ConversationTurnExecutionPhase.ProviderResolution,
+      );
+      if (!isLLMStreamingProvider(provider)) {
+        throw new ConversationProviderStreamingUnsupportedError(providerName);
+      }
 
-    const withUser = appendConversationMessage(
-      input.conversation,
-      { role: LLMMessageRole.User, content: input.content },
-      this.conversationFactory,
-    );
-    const userMessage = getLastMessage(withUser);
-    yield Object.freeze({
-      type: "started",
-      conversation: withUser,
-      userMessage,
-      provider: providerName,
-      model: resolved.model,
-      profile: resolved.profile?.id,
-    });
+      throwIfConversationTurnAborted(
+        composed.signal,
+        ConversationTurnExecutionPhase.UserAppend,
+      );
+      const withUser = appendConversationMessage(
+        input.conversation,
+        { role: LLMMessageRole.User, content: input.content },
+        this.conversationFactory,
+      );
+      throwIfConversationTurnAborted(
+        composed.signal,
+        ConversationTurnExecutionPhase.UserAppend,
+      );
+      const userMessage = getLastMessage(
+        withUser,
+        ConversationTurnExecutionPhase.UserAppend,
+      );
+      throwIfConversationTurnAborted(
+        composed.signal,
+        ConversationTurnExecutionPhase.UserAppend,
+      );
+      yield Object.freeze({
+        type: "started",
+        conversation: withUser,
+        userMessage,
+        provider: providerName,
+        model: resolved.model,
+        profile: resolved.profile?.id,
+      });
 
-    let accumulatedContent = "";
-    let deltaCount = 0;
-    let completedResponse: Readonly<LLMGenerationResponse> | undefined;
-    for await (const event of provider.stream(
-      createProviderRequest(input, withUser, resolved),
-    )) {
-      if (completedResponse !== undefined) {
+      const request = createProviderRequest(
+        withUser,
+        resolved,
+        createEffectiveRequest(input.request, composed.signal),
+      );
+      throwIfConversationTurnAborted(
+        composed.signal,
+        ConversationTurnExecutionPhase.ProviderExecution,
+      );
+      let accumulatedContent = "";
+      let deltaCount = 0;
+      let completedResponse: Readonly<LLMGenerationResponse> | undefined;
+      for await (const event of provider.stream(request)) {
+        throwIfConversationTurnAborted(
+          composed.signal,
+          ConversationTurnExecutionPhase.ProviderExecution,
+        );
+        if (completedResponse !== undefined) {
+          throw streamProtocolError(
+            providerName,
+            "received an event after completion",
+          );
+        }
+        if (!isRecord(event)) {
+          throw streamProtocolError(providerName, "received an invalid event");
+        }
+        if (event.type === "delta") {
+          if (
+            typeof event.delta !== "string" ||
+            typeof event.model !== "string"
+          ) {
+            throw streamProtocolError(
+              providerName,
+              "received an invalid delta event",
+            );
+          }
+          if (event.delta.length === 0) continue;
+          deltaCount += 1;
+          accumulatedContent += event.delta;
+          yield Object.freeze({
+            type: "delta",
+            delta: event.delta,
+            content: accumulatedContent,
+            provider: providerName,
+            model: resolved.model,
+            profile: resolved.profile?.id,
+          });
+          throwIfConversationTurnAborted(
+            composed.signal,
+            ConversationTurnExecutionPhase.ProviderExecution,
+          );
+          continue;
+        }
+        if (event.type === "completed") {
+          if (!hasResponseContent(event.response)) {
+            throw streamProtocolError(
+              providerName,
+              "received an invalid completed event",
+            );
+          }
+          completedResponse = event.response;
+          continue;
+        }
         throw streamProtocolError(
           providerName,
-          "received an event after completion",
+          "received an unknown event type",
         );
       }
-      if (!isRecord(event)) {
-        throw streamProtocolError(providerName, "received an invalid event");
-      }
-      if (event.type === "delta") {
-        if (
-          typeof event.delta !== "string" ||
-          typeof event.model !== "string"
-        ) {
-          throw streamProtocolError(
-            providerName,
-            "received an invalid delta event",
-          );
-        }
-        if (event.delta.length === 0) continue;
-        deltaCount += 1;
-        accumulatedContent += event.delta;
-        yield Object.freeze({
-          type: "delta",
-          delta: event.delta,
-          content: accumulatedContent,
-          provider: providerName,
-          model: resolved.model,
-          profile: resolved.profile?.id,
-        });
-        continue;
-      }
-      if (event.type === "completed") {
-        if (!hasResponseContent(event.response)) {
-          throw streamProtocolError(
-            providerName,
-            "received an invalid completed event",
-          );
-        }
-        completedResponse = event.response;
-        continue;
-      }
-      throw streamProtocolError(providerName, "received an unknown event type");
-    }
-
-    if (completedResponse === undefined) {
-      throw streamProtocolError(providerName, "stream ended before completion");
-    }
-    if (
-      deltaCount > 0 &&
-      completedResponse.message.content !== accumulatedContent
-    ) {
-      throw streamProtocolError(
-        providerName,
-        "completed response content does not match streamed content",
+      throwIfConversationTurnAborted(
+        composed.signal,
+        ConversationTurnExecutionPhase.ProviderExecution,
       );
-    }
 
-    const completedConversation = appendConversationMessage(
-      withUser,
-      {
-        role: LLMMessageRole.Assistant,
-        content: completedResponse.message.content,
-      },
-      this.conversationFactory,
-    );
-    const assistantMessage = getLastMessage(completedConversation);
-    yield Object.freeze({
-      type: "completed",
-      conversation: completedConversation,
-      userMessage,
-      assistantMessage,
-      response: completedResponse,
-      provider: providerName,
-      model: resolved.model,
-      profile: resolved.profile?.id,
-    });
+      if (completedResponse === undefined) {
+        throw streamProtocolError(
+          providerName,
+          "stream ended before completion",
+        );
+      }
+      if (
+        deltaCount > 0 &&
+        completedResponse.message.content !== accumulatedContent
+      ) {
+        throw streamProtocolError(
+          providerName,
+          "completed response content does not match streamed content",
+        );
+      }
+
+      throwIfConversationTurnAborted(
+        composed.signal,
+        ConversationTurnExecutionPhase.AssistantAppend,
+      );
+      const completedConversation = appendConversationMessage(
+        withUser,
+        {
+          role: LLMMessageRole.Assistant,
+          content: completedResponse.message.content,
+        },
+        this.conversationFactory,
+      );
+      throwIfConversationTurnAborted(
+        composed.signal,
+        ConversationTurnExecutionPhase.AssistantAppend,
+      );
+      const assistantMessage = getLastMessage(
+        completedConversation,
+        ConversationTurnExecutionPhase.AssistantAppend,
+      );
+      throwIfConversationTurnAborted(
+        composed.signal,
+        ConversationTurnExecutionPhase.Completed,
+      );
+      yield Object.freeze({
+        type: "completed",
+        conversation: completedConversation,
+        userMessage,
+        assistantMessage,
+        response: completedResponse,
+        provider: providerName,
+        model: resolved.model,
+        profile: resolved.profile?.id,
+      });
+      throwIfConversationTurnAborted(
+        composed.signal,
+        ConversationTurnExecutionPhase.Completed,
+      );
+    } finally {
+      composed.dispose();
+    }
   }
 
   private resolveTurn(input: ConversationTurnInput): ResolvedConversationTurn {
@@ -268,10 +409,14 @@ function validateEngineOptions(
     value.profile === undefined
       ? undefined
       : createAgentProfile(value.profile as never);
+  if (value.signal !== undefined && !(value.signal instanceof AbortSignal)) {
+    throw engineOptionsError("signal must be an AbortSignal");
+  }
   return {
     providers: value.providers as unknown as ConversationProviderResolver,
     ...(conversationFactory === undefined ? {} : { conversationFactory }),
     ...(profile === undefined ? {} : { profile }),
+    ...(value.signal === undefined ? {} : { signal: value.signal }),
   };
 }
 
@@ -305,9 +450,9 @@ function snapshotConversationFactory(
 }
 
 function createProviderRequest(
-  input: ConversationTurnInput,
   conversation: Parameters<typeof conversationToLLMMessages>[0],
   resolved: ResolvedConversationTurn,
+  effectiveRequest: Readonly<ProviderRequestOptions> | undefined,
 ): LLMGenerationRequest {
   const request: LLMGenerationRequest = {
     model: resolved.model,
@@ -315,10 +460,23 @@ function createProviderRequest(
     ...(resolved.generation === undefined
       ? {}
       : { generation: resolved.generation }),
-    ...(input.request === undefined ? {} : { request: input.request }),
+    ...(effectiveRequest === undefined ? {} : { request: effectiveRequest }),
   };
   validateLLMGenerationRequest(request);
   return request;
+}
+
+function createEffectiveRequest(
+  request: ProviderRequestOptions | undefined,
+  signal: AbortSignal | undefined,
+): Readonly<ProviderRequestOptions> | undefined {
+  if (request === undefined && signal === undefined) return undefined;
+  return Object.freeze({
+    ...(request?.timeoutMs === undefined
+      ? {}
+      : { timeoutMs: request.timeoutMs }),
+    ...(signal === undefined ? {} : { signal }),
+  });
 }
 
 function createProviderMessages(
@@ -355,14 +513,24 @@ function mergeGeneration(
 
 function getLastMessage(
   conversation: Parameters<typeof conversationToLLMMessages>[0],
+  phase: ConversationTurnExecutionPhase,
 ) {
   const message = conversation.messages.at(-1);
   if (message === undefined) {
-    throw new ConversationEngineError(
+    throw new ConversationTurnExecutionError(
+      phase,
       "Conversation engine failed to append a message.",
     );
   }
   return message;
+}
+
+function getTurnSignal(input: ConversationTurnInput): AbortSignal | undefined {
+  const value: unknown = input;
+  if (!isRecord(value) || !isRecord(value.request)) return undefined;
+  return value.request.signal instanceof AbortSignal
+    ? value.request.signal
+    : undefined;
 }
 
 function hasResponseContent(value: unknown): value is LLMGenerationResponse {

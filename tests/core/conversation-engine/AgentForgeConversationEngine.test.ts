@@ -118,4 +118,18 @@ describe("AgentForge conversation engine integration", () => {
       provider: "profile-provider",
     });
   });
+
+  it("passes an engine-wide cancellation signal through unchanged", async () => {
+    const controller = new AbortController();
+    const agent = new AgentForge();
+    const engine = agent.createConversationEngine({
+      signal: controller.signal,
+    });
+    controller.abort("agent engine cancelled");
+
+    await expect(engine.runTurn(null as never)).rejects.toMatchObject({
+      reason: "agent engine cancelled",
+      phase: "validation",
+    });
+  });
 });

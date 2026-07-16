@@ -222,6 +222,51 @@ reusable execution defaults and system instructions. The conversation engine
 combines both when calling a provider. Profiles are not persisted or registered
 globally.
 
+## Cancelling conversation turns
+
+Conversation cancellation uses native `AbortSignal`. Pass a per-turn signal
+through `request.signal`, or provide an engine-wide signal when creating the
+engine. Either signal cancels execution.
+
+```ts
+const controller = createConversationTurnController();
+const engine = agent.createConversationEngine({
+  signal: controller.signal,
+});
+
+const turn = engine.runTurn({
+  conversation: createConversation(),
+  content: "Explain cancellation.",
+  model: "example-model",
+});
+
+controller.abort(new Error("Application shutdown"));
+await turn;
+```
+
+The helper is optional. A native controller works for individual turns:
+
+```ts
+const controller = new AbortController();
+
+await engine.runTurn({
+  conversation: createConversation(),
+  content: "Hello",
+  model: "example-model",
+  request: {
+    signal: controller.signal,
+    timeoutMs: 10_000,
+  },
+});
+```
+
+Cancellation rejects the promise or async iterator and never stores a partial
+assistant message. An already-aborted signal takes precedence over turn
+validation. Provider-generated abort errors remain provider errors, while core
+checkpoints use execution-phase diagnostics. Breaking out of a stream as a
+consumer is cleanup, not cancellation. Request timeouts remain provider-owned
+through `timeoutMs`.
+
 ## LLM provider contract
 
 LLM providers accept conversation messages with `system`, `user`, and

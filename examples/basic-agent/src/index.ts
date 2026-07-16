@@ -1,7 +1,9 @@
 import {
   AgentForge,
+  ConversationTurnAbortedError,
   createAgentProfile,
   createConversation,
+  createConversationTurnController,
 } from "@agentforge/core";
 import type { Plugin, PluginContext } from "@agentforge/plugin-sdk";
 import { MockLLMProvider } from "@agentforge/provider-mock";
@@ -108,6 +110,23 @@ async function main(): Promise<void> {
     if (event.type === "delta") process.stdout.write(event.delta);
     if (event.type === "completed") {
       console.log(`\nStreaming finish reason: ${event.response.finishReason}`);
+    }
+  }
+  console.log(`Recorded requests: ${exampleLLMProvider.getRequests().length}`);
+
+  const cancellationController = createConversationTurnController();
+  cancellationController.abort(new Error("Example cancellation"));
+  try {
+    await engine.runTurn({
+      conversation: result.conversation,
+      content: "This turn will be cancelled.",
+      request: { signal: cancellationController.signal },
+    });
+  } catch (error) {
+    if (error instanceof ConversationTurnAbortedError) {
+      console.log(`Cancelled during: ${error.phase}`);
+    } else {
+      throw error;
     }
   }
   console.log(`Recorded requests: ${exampleLLMProvider.getRequests().length}`);
