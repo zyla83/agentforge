@@ -152,6 +152,7 @@ export class ChatApplication {
     const controller = createConversationTurnController();
     this.activeController = controller;
     let completedConversation: Conversation | undefined;
+    let receivedNonEmptyDelta = false;
     this.output.write("Assistant: ");
     this.assistantLineOpen = true;
 
@@ -166,10 +167,18 @@ export class ChatApplication {
       })) {
         if (event.type === "delta") {
           this.output.write(event.delta);
+          if (event.delta.length > 0) receivedNonEmptyDelta = true;
           this.assistantLineOpen = !event.delta.endsWith("\n");
         }
         if (event.type === "completed") {
           completedConversation = event.conversation;
+          if (!receivedNonEmptyDelta) {
+            const completedContent = event.assistantMessage.content;
+            this.output.write(completedContent);
+            if (completedContent.length > 0) {
+              this.assistantLineOpen = !completedContent.endsWith("\n");
+            }
+          }
         }
       }
 

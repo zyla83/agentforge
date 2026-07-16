@@ -87,6 +87,74 @@ function createFakeEngine(inputs: ConversationTurnInput[]): ConversationEngine {
   } as unknown as ConversationEngine;
 }
 
+function createScriptedEngine(
+  inputs: ConversationTurnInput[],
+  deltas: readonly string[],
+  completedContent: string,
+): ConversationEngine {
+  return {
+    async *streamTurn(input: ConversationTurnInput) {
+      inputs.push(input);
+      const withUser = appendConversationMessage(input.conversation, {
+        role: LLMMessageRole.User,
+        content: input.content,
+      });
+      const completedWithValidatedMessage = appendConversationMessage(
+        withUser,
+        {
+          role: LLMMessageRole.Assistant,
+          content: completedContent || "placeholder",
+        },
+      );
+      const assistantMessage = {
+        ...requireLast(completedWithValidatedMessage.messages),
+        content: completedContent,
+      };
+      const completed = {
+        ...completedWithValidatedMessage,
+        messages: [...withUser.messages, assistantMessage],
+      };
+      yield {
+        type: "started",
+        conversation: withUser,
+        userMessage: requireLast(withUser.messages),
+        provider: "ollama",
+        model: "model",
+        profile: "interactive-chat",
+      } as const;
+      let streamedContent = "";
+      for (const delta of deltas) {
+        streamedContent += delta;
+        yield {
+          type: "delta",
+          delta,
+          content: streamedContent,
+          provider: "ollama",
+          model: "model",
+          profile: "interactive-chat",
+        } as const;
+      }
+      yield {
+        type: "completed",
+        conversation: completed,
+        userMessage: requireLast(withUser.messages),
+        assistantMessage,
+        response: {
+          model: "model",
+          message: {
+            role: LLMMessageRole.Assistant,
+            content: completedContent,
+          },
+          finishReason: LLMFinishReason.Stop,
+        },
+        provider: "ollama",
+        model: "model",
+        profile: "interactive-chat",
+      } as const;
+    },
+  } as unknown as ConversationEngine;
+}
+
 function requireLast<T>(values: readonly T[]): T {
   const value = values.at(-1);
   if (value === undefined) throw new Error("Expected a conversation message.");
@@ -155,6 +223,106 @@ describe("ChatApplication", () => {
     expect(errors.read()).toBe("");
     expect(process.listenerCount("SIGINT")).toBe(initialSigintListeners);
     expect(process.listenerCount("SIGTERM")).toBe(initialSigtermListeners);
+  });
+
+  it("renders a completed response when no deltas are emitted", async () => {
+    const output = captureStream();
+    const errors = captureStream();
+    const inputs: ConversationTurnInput[] = [];
+    const input = new PassThrough();
+    const application = createApplication(
+      input,
+      createScriptedEngine(inputs, [], "Complete response"),
+      output.stream,
+      errors.stream,
+    );
+
+    const running = application.run();
+    await output.waitFor("You: ");
+    input.write("Question\n");
+    await output.waitFor("Assistant: Complete response\nYou: ");
+    input.write("/info\n");
+    await output.waitFor("Messages: 2\nYou: ");
+    input.write("/exit\n");
+    await running;
+
+    expect(inputs).toHaveLength(1);
+    expect(output.read()).toContain("Assistant: Complete response");
+    expect(output.read()).toContain("Messages: 2");
+    expect(errors.read()).toBe("");
+  });
+
+  it("does not duplicate completed content after streaming deltas", async () => {
+    const output = captureStream();
+    const errors = captureStream();
+    const input = new PassThrough();
+    const application = createApplication(
+      input,
+      createScriptedEngine([], ["Hello", " world"], "Hello world"),
+      output.stream,
+      errors.stream,
+    );
+
+    const running = application.run();
+    await output.waitFor("You: ");
+    input.write("Question\n");
+    await output.waitFor("Assistant: Hello world\nYou: ");
+    input.write("/exit\n");
+    await running;
+
+    expect(countOccurrences(output.read(), "Hello world")).toBe(1);
+    expect(output.read()).not.toContain("Hello worldHello world");
+    expect(errors.read()).toBe("");
+  });
+
+  it("does not add a blank line after completed content ending in a newline", async () => {
+    const output = captureStream();
+    const errors = captureStream();
+    const input = new PassThrough();
+    const application = createApplication(
+      input,
+      createScriptedEngine([], [], "Complete response\n"),
+      output.stream,
+      errors.stream,
+    );
+
+    const running = application.run();
+    await output.waitFor("You: ");
+    input.write("Question\n");
+    await output.waitFor("Assistant: Complete response\nYou: ");
+    input.write("/exit\n");
+    await running;
+
+    expect(output.read()).not.toContain("Complete response\n\nYou: ");
+    expect(errors.read()).toBe("");
+  });
+
+  it("handles an empty completed response and retains the conversation", async () => {
+    const output = captureStream();
+    const errors = captureStream();
+    const input = new PassThrough();
+    const application = createApplication(
+      input,
+      createScriptedEngine([], [], ""),
+      output.stream,
+      errors.stream,
+    );
+
+    const running = application.run();
+    await output.waitFor("You: ");
+    input.write("Question\n");
+    await output.waitFor("Assistant: ");
+    await output.waitFor("You: ", 2);
+    input.write("/info\n");
+    await output.waitFor("Messages: 2\nYou: ");
+    input.write("/exit\n");
+    await running;
+
+    expect(output.read()).not.toContain("undefined");
+    expect(output.read()).not.toContain("null");
+    expect(output.read()).toContain("Assistant: \nYou: ");
+    expect(output.read()).toContain("Messages: 2");
+    expect(errors.read()).toBe("");
   });
 
   it("handles help, info, reset, blank input, and exit without a turn", async () => {
