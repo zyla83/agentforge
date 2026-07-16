@@ -155,6 +155,41 @@ Conversion preserves role, content, and order while removing conversation-only
 IDs and timestamps. Tests may inject deterministic ID generators and clocks into
 the factory functions. The model does not execute providers or persist data.
 
+## Conversation engine
+
+The stateless conversation engine orchestrates one immutable user-to-assistant
+turn. It resolves the default or an explicitly named provider, while leaving the
+source conversation unchanged.
+
+```ts
+const engine = agent.createConversationEngine();
+const source = createConversation();
+
+const result = await engine.runTurn({
+  conversation: source,
+  content: "Hello",
+  model: "example-model",
+});
+```
+
+Streaming execution is lazy and emits a user-appended `started` snapshot,
+accumulated deltas, and one final immutable conversation after the provider ends
+cleanly.
+
+```ts
+for await (const event of engine.streamTurn({
+  conversation: result.conversation,
+  content: "Continue",
+  model: "example-model",
+})) {
+  if (event.type === "delta") process.stdout.write(event.delta);
+}
+```
+
+The conversation model stores immutable history; the conversation engine
+orchestrates provider execution for one turn. Provider failures reject execution,
+and persistence is not included.
+
 ## LLM provider contract
 
 LLM providers accept conversation messages with `system`, `user`, and

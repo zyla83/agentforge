@@ -1,15 +1,6 @@
-import {
-  AgentForge,
-  appendConversationMessage,
-  conversationToLLMMessages,
-  createConversation,
-} from "@agentforge/core";
+import { AgentForge, createConversation } from "@agentforge/core";
 import type { Plugin, PluginContext } from "@agentforge/plugin-sdk";
 import { MockLLMProvider } from "@agentforge/provider-mock";
-import {
-  LLMMessageRole,
-  isLLMStreamingProvider,
-} from "@agentforge/provider-sdk";
 
 const exampleLLMProvider = new MockLLMProvider({
   name: "example-llm",
@@ -87,41 +78,23 @@ async function main(): Promise<void> {
   await agent.start();
   console.log(`AgentForge state: ${agent.getState()}`);
 
-  const defaultProvider = agent.getDefaultLLMProvider();
-  if (defaultProvider === undefined) {
-    throw new Error("No default LLM provider is registered.");
-  }
-
-  const userMessage = "Hello, AgentForge!";
-  let conversation = createConversation();
-  conversation = appendConversationMessage(conversation, {
-    role: LLMMessageRole.User,
-    content: userMessage,
-  });
-  const response = await defaultProvider.generate({
+  const engine = agent.createConversationEngine();
+  const result = await engine.runTurn({
+    conversation: createConversation(),
+    content: "Hello, AgentForge!",
     model: "example-model",
-    messages: conversationToLLMMessages(conversation),
-  });
-  conversation = appendConversationMessage(conversation, {
-    role: LLMMessageRole.Assistant,
-    content: response.message.content,
   });
 
-  console.log(`User: ${userMessage}`);
-  console.log(`Assistant: ${response.message.content}`);
-  console.log(`Conversation messages: ${conversation.messages.length}`);
+  console.log(`User: ${result.userMessage.content}`);
+  console.log(`Assistant: ${result.assistantMessage.content}`);
+  console.log(`Conversation messages: ${result.conversation.messages.length}`);
   console.log(`Recorded requests: ${exampleLLMProvider.getRequests().length}`);
 
-  if (!isLLMStreamingProvider(defaultProvider)) {
-    throw new Error("The default LLM provider does not support streaming.");
-  }
-
   process.stdout.write("Streaming assistant: ");
-  for await (const event of defaultProvider.stream({
+  for await (const event of engine.streamTurn({
+    conversation: result.conversation,
+    content: "Stream a greeting, please.",
     model: "example-model",
-    messages: [
-      { role: LLMMessageRole.User, content: "Stream a greeting, please." },
-    ],
   })) {
     if (event.type === "delta") process.stdout.write(event.delta);
     if (event.type === "completed") {

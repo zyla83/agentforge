@@ -25,6 +25,11 @@ import {
 } from "@agentforge/shared";
 import type { AgentForgeOptions } from "./AgentForgeOptions.js";
 import { AgentForgeState } from "./AgentForgeState.js";
+import {
+  type ConversationEngine,
+  createConversationEngine as createConversationEngineFactory,
+} from "./conversation-engine/index.js";
+import type { ConversationFactoryOptions } from "./conversation/index.js";
 import { LLMProviderRegistryImpl } from "./providers/index.js";
 import { snapshotPluginMetadata } from "./validatePluginMetadata.js";
 import { AGENTFORGE_VERSION } from "./version.js";
@@ -217,6 +222,17 @@ export class AgentForge {
 
   getRegisteredLLMProviders(): readonly Readonly<ProviderMetadata>[] {
     return this.llmProviderRegistry.list();
+  }
+
+  createConversationEngine(options?: {
+    readonly conversationFactory?: ConversationFactoryOptions;
+  }): ConversationEngine {
+    return createConversationEngineFactory({
+      providers: this,
+      ...(options?.conversationFactory === undefined
+        ? {}
+        : { conversationFactory: options.conversationFactory }),
+    });
   }
 
   private assertState(operation: string, expectedState: AgentForgeState): void {

@@ -43,3 +43,7 @@
 - Immutable conversation snapshots with generated conversation and message IDs
 - Timezone-aware conversation timestamp and chronology validation
 - Immutable message appends, provider-message conversion, and JSON-compatible serialization
+- Stateless conversation engine for complete and streaming user-to-assistant turns
+- Default and named provider resolution with immutable turn results
+- Accumulated conversation stream events and defensive completion validation
+- `AgentForge.createConversationEngine()` convenience integration

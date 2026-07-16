@@ -1,11 +1,6 @@
-import { AgentForge } from "@agentforge/core";
+import { AgentForge, createConversation } from "@agentforge/core";
 import { OllamaLLMProvider } from "@agentforge/provider-ollama";
-import {
-  LLMMessageRole,
-  ProviderError,
-  ProviderHealthStatus,
-  isLLMStreamingProvider,
-} from "@agentforge/provider-sdk";
+import { ProviderError, ProviderHealthStatus } from "@agentforge/provider-sdk";
 
 const DEFAULT_BASE_URL = "http://localhost:11434";
 const DEFAULT_MODEL = "llama3.1:8b";
@@ -37,24 +32,13 @@ async function main(): Promise<void> {
       return;
     }
 
-    const defaultProvider = agent.getDefaultLLMProvider();
-    if (defaultProvider === undefined) {
-      throw new Error("No default LLM provider is registered.");
-    }
-    if (!isLLMStreamingProvider(defaultProvider)) {
-      throw new Error("The default LLM provider does not support streaming.");
-    }
-
+    const engine = agent.createConversationEngine();
     process.stdout.write("Assistant: ");
-    for await (const event of defaultProvider.stream({
+    for await (const event of engine.streamTurn({
+      conversation: createConversation(),
+      content:
+        "Reply with one short sentence confirming that AgentForge can communicate with Ollama.",
       model,
-      messages: [
-        {
-          role: LLMMessageRole.User,
-          content:
-            "Reply with one short sentence confirming that AgentForge can communicate with Ollama.",
-        },
-      ],
       request: { timeoutMs: REQUEST_TIMEOUT_MS },
     })) {
       if (event.type === "delta") process.stdout.write(event.delta);
