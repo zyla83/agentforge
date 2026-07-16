@@ -62,3 +62,6 @@
 - Explicit conversation storage contract separate from conversation execution
 - Deeply immutable in-memory conversation persistence with per-ID revisions and saved timestamps
 - Deterministic paginated conversation listing and typed storage errors
+- Versioned V1 JSON documents for conversations and conversation-store entries
+- Deterministic compact and pretty serialization with immutable round-trip restoration
+- Safe unknown-value decoding with typed syntax, validation, and unsupported-version errors

@@ -15,8 +15,3 @@ export { conversationToLLMMessages } from "./conversationToLLMMessages.js";
 export { createConversation } from "./createConversation.js";
 export { createConversationMessage } from "./createConversationMessage.js";
 export * from "./errors/index.js";
-export {
-  serializeConversation,
-  type SerializedConversation,
-  type SerializedConversationMessage,
-} from "./serializeConversation.js";

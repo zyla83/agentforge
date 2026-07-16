@@ -218,6 +218,37 @@ All loaded conversations and list results are immutable snapshots. Future
 database adapters can implement the same `ConversationStore` interface without
 changing conversation execution.
 
+## Conversation serialization
+
+Conversation documents use the explicit `agentforge.conversation` kind and V1
+schema version. Serialization produces deterministic JSON in compact form by
+default or with standard two-space indentation when `pretty` is enabled.
+
+```ts
+const serialized = serializeConversation(conversation, {
+  pretty: true,
+});
+
+const restored = deserializeConversation(serialized);
+```
+
+Decoders validate untrusted strings and already parsed unknown values. Malformed
+JSON, invalid document structure, and unsupported future versions produce
+distinct typed errors. Restored conversations are deeply immutable snapshots.
+
+Conversation-store entries use the separate
+`agentforge.conversation-store-entry` V1 envelope and preserve persistence
+metadata:
+
+```ts
+const saved = await store.save(conversation);
+const serializedEntry = serializeConversationStoreEntry(saved);
+const restoredEntry = deserializeConversationStoreEntry(serializedEntry);
+```
+
+Serialization does not read or write files. The serialized schema is a
+compatibility boundary and is intentionally separate from runtime interfaces.
+
 ## Conversation engine
 
 The stateless conversation engine orchestrates one immutable user-to-assistant
