@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   validate:
-    name: Check, build and test
+    name: Verify MVP
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -49,11 +49,5 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check formatting and lint
-        run: pnpm check
-
-      - name: Build and test
-        run: pnpm test
-
-      - name: Run basic example
-        run: pnpm example:basic
+      - name: Verify MVP
+        run: pnpm verify:mvp

@@ -1,8 +1,8 @@
 # AgentForge Interactive Chat CLI
 
-This example connects AgentForge to a local Ollama server, streams assistant
-responses, and persists immutable conversations with
-`@agentforge/storage-filesystem`.
+This live, non-deterministic example connects AgentForge to a local Ollama
+server, streams assistant responses, and persists immutable conversations with
+`@agentforge/storage-filesystem`. It is not part of automated CI.
 
 ## Requirements
 
@@ -35,7 +35,9 @@ latest conversation automatically; use `/list` and `/load` to resume one.
 
 Relative data-directory overrides are resolved from the current working
 directory. The system prompt becomes an immutable agent profile instruction and
-is not stored in conversation history.
+is not stored in conversation history. Use `/delete` for individual
+conversations; when the CLI is stopped, remove the configured data directory if
+all local history should be discarded.
 
 ## Example tools
 

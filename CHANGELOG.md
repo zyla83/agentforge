@@ -2,111 +2,76 @@
 
 ## v0.1.0 (work in progress)
 
+The first AgentForge MVP baseline. No release date or tag has been created.
+
 ### Added
-- Core package
-- Plugin SDK
-- Shared package
-- Basic tests
-- Predictable plugin registration, startup, rollback, and shutdown lifecycle
-- Public framework states and focused lifecycle error types
-- Runnable basic example demonstrating the plugin lifecycle
-- Public `AGENTFORGE_VERSION` runtime version constant
-- `@agentforge/config` package with validated instance configuration
-- Per-plugin configuration values exposed through `PluginContext`
-- `@agentforge/logger` package with a default Pino implementation
-- Framework and plugin-specific child loggers with custom logger support
-- Structured plugin metadata with Semantic Versioning validation
-- Registration-time metadata snapshots and plugin versions in logger bindings
-- Exact plugin lookup, registration checks, and ordered read-only metadata listing
-- `@agentforge/provider-sdk` package with base provider and metadata contracts
-- Immutable provider health results and status helpers
-- Provider request options with timeout validation and native abort checks
-- Provider-specific error hierarchy with cause preservation
-- Provider-independent `LLMProvider` contract with conversation message roles
-- LLM generation requests, responses, parameters, and immutable token usage
-- Deterministic runtime validation with aggregated LLM request details
-- LLM provider registration with explicit default-provider selection
-- Ordered read-only LLM provider registry exposed through `PluginContext`
-- `@agentforge/provider-mock` package with deterministic LLM responses and configurable health results
-- Immutable mock request history for inspecting validated generation calls
-- Basic example generation through the registered default mock LLM provider
-- `@agentforge/ollama-client` transport client for server version, model listing, and non-streaming chat
-- Ollama request timeouts, `AbortSignal` cancellation, and structured transport errors
-- `@agentforge/provider-ollama` package with AgentForge-to-Ollama request mapping
-- Ollama response, finish-reason, token-usage, provider-error, and health-check mapping
-- Model-aware Ollama health checks with immutable structured details
-- Degraded health status for missing required models and an optional live Ollama example
-- Provider-independent LLM delta and completion streaming contracts with runtime capability detection
-- Deterministic mock LLM streaming with validated configurable deltas
-- Incremental Ollama NDJSON chat streaming with lifetime timeout and cancellation handling
-- Streaming Ollama provider mapping, registry examples, and live incremental output
-- Immutable conversation snapshots with generated conversation and message IDs
-- Timezone-aware conversation timestamp and chronology validation
-- Immutable message appends, provider-message conversion, and JSON-compatible serialization
-- Stateless conversation engine for complete and streaming user-to-assistant turns
-- Default and named provider resolution with immutable turn results
-- Accumulated conversation stream events and defensive completion validation
-- `AgentForge.createConversationEngine()` convenience integration
-- Immutable agent profiles with reusable system prompts and optional model, provider, and generation defaults
-- Engine-level and per-turn profile selection with property-level generation merging
-- Provider-only system prompt injection excluded from conversation snapshots
-- Resolved profile and model metadata in conversation results and stream events
-- Native conversation-turn cancellation with a reusable frozen controller
-- Engine and per-turn signal composition with deterministic listener cleanup
-- Execution-phase abort checkpoints preventing partial assistant snapshots
-- Streaming iterator cleanup with unchanged provider abort-error propagation
-- Interactive local Ollama chat CLI with environment-based model configuration
-- In-memory multi-turn conversation history with incremental terminal streaming
-- Stable reset, help, info, exit, and quit commands
-- Active-response cancellation with graceful EOF and process-signal shutdown
-- Explicit conversation storage contract separate from conversation execution
-- Deeply immutable in-memory conversation persistence with per-ID revisions and saved timestamps
-- Deterministic paginated conversation listing and typed storage errors
-- Versioned V1 JSON documents for conversations and conversation-store entries
-- Deterministic compact and pretty serialization with immutable round-trip restoration
-- Safe unknown-value decoding with typed syntax, validation, and unsupported-version errors
-- Node.js filesystem conversation-store adapter with restart persistence
-- Atomic versioned store-entry files using safe Base64URL conversation filenames
-- Deterministic filesystem pagination with typed corruption, initialization, and I/O errors
-- Durable filesystem-backed conversations in the interactive chat CLI
-- Automatic persistence after successful chat turns with transactional in-memory state adoption
-- Explicit chat save, list, load, and delete commands
-- V1 conversation-document import and atomic export commands
-- Provider-neutral immutable tool definitions with limited JSON Schema inputs
-- Immutable tool calls plus JSON-compatible success and failure results
-- Asynchronous typed tool handlers and immutable cancellation-aware execution context
-- Typed tool contract validation errors with defensive JSON snapshots
-- Immutable registered tool associations and a read-only registry contract
-- Exact, case-sensitive `AgentForge` tool registration with ordered lookup and listing
-- Stable read-only tool registry access through `PluginContext`
-- Typed duplicate-tool and missing-tool registry errors
-- Provider-neutral LLM tool definitions, tool calls, result messages, and capability metadata
-- Limited JSON Schema argument validation and immutable sequential tool execution
-- Structured model-visible failures for missing tools, invalid arguments, handler failures, and invalid outputs
-- Opt-in bounded multi-round tool orchestration for complete and streaming conversation turns
-- Streaming tool-call lifecycle events with immutable execution records
-- V2 conversation and store-entry serialization with backward-compatible V1 decoding
-- Ollama tool definitions, tool-call messages, tool results, and JSON wire contracts
-- Tool-aware Ollama request serialization plus complete and streaming response parsing
-- Ollama provider tool capability and provider-neutral definition/message mapping
-- Immutable Ollama tool-call response mapping with provider-instance call IDs
-- Conservative streaming tool-call aggregation with mixed-output rejection
-- `@agentforge/example-tools` with calculator, text-formatting, and inventory lookup examples
-- Explicit ordered example-tool registration helper with immutable associations
-- Deterministic non-network two-round conversation tool execution example
-- Opt-in `AGENTFORGE_CHAT_TOOLS=example` mode for the interactive chat CLI
-- Ordered example-tool registration and explicitly enabled conversation tool execution
-- Tool-call and structured tool-result status lines during terminal streaming
-- V2 persistence for completed tool-enabled chat conversations
-- Text-only interactive chat remains the default when tool mode is unset or `off`
-- Opt-in synchronous tool execution observers with immutable start and completion events
-- Engine-scoped turn, provider-round, execution-index, and tool-call correlation metadata
-- Monotonic tool execution duration measurement and enriched runtime execution records
-- Deterministic observer ordering with exception isolation and non-awaited return values
-- Optional observer-only tool argument and result redaction with immutable snapshots
-- Safe redactor failure isolation that preserves execution and persisted conversation data
-- Rejection handling for unsupported asynchronous tool execution redactors
-- Single-line ANSI-safe chat CLI previews with Unicode-aware bounded truncation
-- Provider response errors for invalid complete and streaming Ollama tool output
-- Documented tool side-effect categories, confirmation guidance, and no-retry policy
-- Clarified Ollama adapter versus model tool compatibility
+
+- Framework and plugin lifecycle with validated configuration, structured logging,
+  immutable metadata snapshots, read-only registries, and focused lifecycle errors
+- Immutable agent profiles with reusable system prompts and generation defaults
+- Provider-neutral health, request, error, complete generation, streaming, and tool contracts
+- Exact LLM provider registration with default selection and plugin-context inspection
+- Deterministic mock LLM provider with complete/streaming responses and request history
+- Low-level Ollama HTTP client for version, models, complete chat, NDJSON streaming,
+  timeout, abort, transport errors, and provider-neutral tool wire structures
+- Ollama LLM provider with request/response mapping, health checks, model requirements,
+  token usage, streaming, cancellation, and tool calling
+- Immutable conversations, messages, IDs, chronology validation, and LLM conversion
+- Complete and streaming conversation engine with profiles, provider selection,
+  cancellation, bounded multi-round tools, and immutable turn results
+- In-memory conversation storage with revisioning, pagination, and typed errors
+- Versioned V1/V2 conversation and store-entry serialization with safe unknown decoding
+- Durable Node.js filesystem storage with safe filenames, temporary writes, flush,
+  rename, restart persistence, corruption detection, and V1/V2 compatibility
+- Provider-neutral tool definitions, limited JSON Schema inputs, calls, handlers,
+  results, execution context, registry, validation, and structured failures
+- Sequential tool execution and opt-in multi-round orchestration for complete and
+  streaming turns
+- Deterministic calculator, text-formatting, and inventory example tools
+- Interactive local Ollama chat with streaming, cancellation, durable persistence,
+  save/list/load/delete/import/export commands, and opt-in example tools
+- Synchronous immutable tool execution observer events with correlation, timing,
+  ordered dispatch, exception isolation, and execution records
+- Observer-only argument and result redaction with immutable validated snapshots
+- Deterministic basic and multi-round tool examples that require no Ollama
+- MVP readiness documentation, package-root import checks, built-package smoke checks,
+  and a complete `pnpm verify:mvp` local/CI gate
+
+### Changed
+
+- Tool-enabled conversations use V2 persistence while V1 text history remains readable
+- The chat CLI remains text-only by default and enables bundled tools only through
+  `AGENTFORGE_CHAT_TOOLS=example`
+- Root documentation now presents the supported MVP, architecture, safety model,
+  deterministic quick start, live Ollama workflow, limitations, and post-MVP roadmap
+- CI now runs the complete deterministic MVP verification command on Node.js 22
+
+### Fixed
+
+- Semantic version validation rejects whitespace and underscores
+- Unknown provider names consistently use the `<unknown>` fallback
+- Ollama health checks reject unsafe base URLs and preserve model-aware status
+- Streaming completion is emitted only after the transport ends cleanly
+- Chat CLI renders completed responses when a provider emits no deltas
+- Invalid complete and streaming Ollama output uses `ProviderResponseError`
+- Unsupported rejected redactor promises and hostile thenables cannot cause
+  unhandled rejections or alter tool execution
+
+### Security
+
+- Tool observer redactor failures use non-sensitive fallback payloads without
+  changing handler inputs, model-visible results, records, or persisted history
+- Chat CLI tool previews are bounded, single-line, Unicode-aware, and strip ANSI,
+  C0, and DEL terminal controls
+- Documentation distinguishes terminal sanitization, observer redaction, persisted
+  sensitive data, side-effect classes, destructive-action confirmation, and retry risk
+- No unrestricted shell tool, sandbox guarantee, automatic retry, or rollback is implied
+
+### Known limitations
+
+- Ollama is the only implemented real LLM provider and model tool support varies
+- No dynamic model probing, voice I/O, Windows tools, confirmation/permission engine,
+  sandbox, automatic retry, transaction rollback, distributed runtime, or GUI
+- Filesystem storage is local and does not coordinate multi-process writers
+- Package publication metadata and per-package documentation require a separate review
+- Public APIs may evolve during the 0.x series before 1.0.0

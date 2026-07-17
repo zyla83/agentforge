@@ -1,346 +1,280 @@
 # AgentForge
 
-AgentForge is an offline-first AI agent framework.
+AgentForge is a TypeScript framework for composing offline-first, local AI
+agents from explicit providers, conversations, plugins, storage adapters, and
+validated application tools.
+
+## Status
+
+AgentForge 0.1.0 is an MVP candidate. The deterministic examples and automated
+test suite run without Ollama; live generation requires a local Ollama server.
+The framework supplies orchestration infrastructure, while applications own
+their tool handlers, permissions, and safety policy.
+
+AgentForge follows semantic versioning, but APIs may evolve during the 0.x
+series. Version 0.1.0 is the first MVP baseline, not a production-readiness or
+formal security claim.
+
+## What the MVP supports
+
+- Plugin lifecycle, immutable metadata, configuration, and structured logging
+- Provider-neutral LLM, streaming, health, tool, and error contracts
+- Deterministic mock generation plus a real local Ollama adapter
+- Immutable agent profiles, conversations, and multi-turn orchestration
+- Cancellation, bounded tool rounds, and complete/streaming parity
+- In-memory and durable local filesystem conversation stores
+- Versioned V1/V2 persistence, import, and export
+- Validated tool registration, execution, structured failures, and examples
+- Ollama tool-call mapping and opt-in tool-enabled chat
+- Immutable tool execution observations and observer-only redaction
+- Bounded single-line terminal previews hardened against control sequences
+
+## What the MVP does not support
+
+The MVP does not include voice I/O, Windows control tools, arbitrary shell
+execution, automatic tool retries, confirmation or permission engines,
+sandboxing, transactions or rollback, remote/distributed execution, a GUI,
+additional real LLM providers, or telemetry exporters.
 
 ## Requirements
 
 - Node.js 22 or newer
-- Corepack
+- pnpm 11.12.0 through Corepack
+- Ollama only for live Ollama examples and the interactive chat
 
-## Setup
+## Installation
 
 ```bash
 corepack enable
-pnpm install
-```
-
-## Development
-
-```bash
+pnpm install --frozen-lockfile
 pnpm build
-pnpm test
-pnpm check
 ```
 
-`pnpm build` compiles every workspace package, `pnpm test` runs the Vitest
-suite, and `pnpm check` validates formatting and lint rules with Biome.
+## Quick start
 
-## Run the example
+These deterministic examples require no network service:
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 pnpm build
 pnpm example:basic
+pnpm example:tools
 ```
 
-The basic example demonstrates ordered plugin initialization and reverse-order
-shutdown.
+`example:basic` demonstrates configuration, plugins, mock complete and streaming
+turns, profiles, and cancellation. `example:tools` demonstrates a deterministic
+two-round tool call, validated local execution, structured results, and
+observer events.
 
-## Interactive chat CLI
+The basic public API is package-root based:
 
-The interactive example requires a local Ollama installation and demonstrates
-durable filesystem-backed conversations, successful-turn persistence,
-load/list/delete commands, and versioned conversation import/export. The system
-prompt comes from an immutable agent profile.
+```ts
+import {
+  AgentForge,
+  createAgentProfile,
+  createConversation,
+} from "@agentforge/core";
+import { MockLLMProvider } from "@agentforge/provider-mock";
+
+const agent = new AgentForge();
+agent.registerLLMProvider(new MockLLMProvider(), { default: true });
+const profile = createAgentProfile({
+  id: "assistant",
+  systemPrompt: "Be concise and accurate.",
+  model: "mock-model",
+});
+
+const result = await agent.createConversationEngine({ profile }).runTurn({
+  conversation: createConversation(),
+  content: "Hello",
+});
+
+console.log(result.assistantMessage.content);
+```
+
+## Interactive chat
+
+Install Ollama, select any installed model appropriate for your use case, then:
 
 ```bash
 ollama serve
-ollama pull llama3.1:8b
+ollama pull <model>
+pnpm build
 pnpm example:chat
 ```
 
-Override the model in POSIX-compatible shells:
+Configure the model with `OLLAMA_MODEL`; the default is documented by the chat
+example. Text-only mode is the default and can be explicit.
+
+POSIX-compatible shells:
 
 ```bash
-OLLAMA_MODEL=qwen2.5:7b pnpm example:chat
+OLLAMA_MODEL=<model> AGENTFORGE_CHAT_TOOLS=off pnpm example:chat
 ```
 
 PowerShell:
 
 ```powershell
-$env:OLLAMA_MODEL = "qwen2.5:7b"
+$env:OLLAMA_MODEL = "<model>"
+$env:AGENTFORGE_CHAT_TOOLS = "off"
 pnpm example:chat
 ```
 
-The CLI saves data under `.agentforge/chat` by default. See the
-[chat CLI README](examples/chat-cli/README.md) for its commands, data-directory
-override, persistence semantics, and import/export format. Ctrl+C during
-generation cancels the active response without saving partial output.
+Conversation files default to `.agentforge/chat` and support `/save`, `/list`,
+`/load`, `/delete`, `/export`, and `/import`. Use `/help` for the exact command
+syntax. Expected user errors are rendered without raw stack traces.
 
-Example tools are disabled by default. Enable all three bundled tools at
-startup with a tool-capable Ollama model:
+## Tool-enabled chat
+
+The bundled `calculator`, `format_text`, and `lookup_inventory` tools are
+enabled only when requested. The selected model must support Ollama tool calls;
+adapter support does not guarantee model support.
+
+POSIX-compatible shells:
 
 ```bash
-AGENTFORGE_CHAT_TOOLS=example pnpm example:chat
+OLLAMA_MODEL=<tool-capable-model> AGENTFORGE_CHAT_TOOLS=example pnpm example:chat
 ```
 
-Tool calls and results appear as terminal status lines, and completed
-tool-enabled conversations retain their V2 tool messages. The mode cannot be
-changed while the CLI is running.
+PowerShell:
 
-## Workspace
-
-- `packages/core` - the AgentForge facade and framework lifecycle
-- `packages/example-tools` - deterministic reusable tool API examples
-- `packages/ollama-client` - low-level transport client for the Ollama REST API
-- `packages/plugin-sdk` - the public plugin contract
-- `packages/provider-mock` - deterministic in-memory LLM provider for tests and examples
-- `packages/provider-ollama` - AgentForge LLM provider backed by Ollama
-- `packages/provider-sdk` - base contracts for external capability providers
-- `packages/shared` - shared framework utilities
-- `packages/storage-filesystem` - durable Node.js conversation-store adapter
-- `examples/basic-agent` - runnable plugin lifecycle example
-- `examples/chat-cli` - interactive multi-turn Ollama chat application
-- `examples/ollama-agent` - optional live Ollama health and generation example
-- `examples/tool-execution` - deterministic two-round tool execution example
-- `tests` - repository-level tests
-
-## Current state
-
-This release establishes the framework foundation and Ollama LLM integration.
-Provider integrations for Whisper and Piper are not implemented yet.
-
-## Configuration
-
-AgentForge validates configuration during construction and rejects unknown
-top-level properties.
-
-```ts
-const agent = new AgentForge({
-  instanceName: "desktop-assistant",
-  plugins: {
-    example: {
-      enabled: true,
-    },
-  },
-});
+```powershell
+$env:OLLAMA_MODEL = "<tool-capable-model>"
+$env:AGENTFORGE_CHAT_TOOLS = "example"
+pnpm example:chat
 ```
 
-Plugin configuration is passed to its owning plugin as `unknown`. Each plugin
-is responsible for validating its own configuration value.
+The CLI reports tool start and completion, sends structured results back to the
+model, and persists completed V2 tool history. Invalid tool mode values are
+rejected with the valid `off` and `example` values. Tool mode cannot be changed
+during a running CLI session.
 
-## Logging
+## Architecture
 
-AgentForge provides a default Pino logger. Each plugin receives a child logger
-through `PluginContext` and can attach structured context to a message.
-
-```ts
-async initialize(context) {
-  context.logger.info("Plugin initialized", {
-    featureEnabled: true,
-  });
-}
+```text
+Application
+  -> AgentForge
+  -> ConversationEngine
+  -> LLM provider
+  -> provider tool calls
+  -> ToolRegistry / ToolExecutor
+  -> model-visible tool results
+  -> final assistant response
+  -> conversation persistence
 ```
 
-Consumers may provide their own `Logger`. Custom implementations must return a
-valid `Logger` from `child()`.
+The provider SDK owns provider-neutral contracts. Core owns registration and
+orchestration. Provider adapters own wire mapping. Storage adapters own durable
+persistence. Applications own executable handlers and their safety policy.
+Core does not depend on Ollama or filesystem adapters.
 
-```ts
-const agent = new AgentForge(config, {
-  logger: customLogger,
-});
+## Workspace packages
+
+Publishable library packages:
+
+- `@agentforge/config` — validated framework configuration
+- `@agentforge/core` — lifecycle, registries, conversations, tools, and orchestration
+- `@agentforge/example-tools` — deterministic reusable tool examples
+- `@agentforge/logger` — framework logging abstraction and Pino implementation
+- `@agentforge/ollama-client` — low-level Ollama HTTP and streaming client
+- `@agentforge/plugin-sdk` — plugin contracts and context
+- `@agentforge/provider-mock` — deterministic test and example LLM provider
+- `@agentforge/provider-ollama` — provider-neutral Ollama LLM adapter
+- `@agentforge/provider-sdk` — provider, LLM, streaming, health, and tool contracts
+- `@agentforge/shared` — shared result and error primitives
+- `@agentforge/storage-filesystem` — durable Node.js conversation store
+
+Private examples:
+
+- `@agentforge/example-basic` — deterministic framework and mock-provider tour
+- `@agentforge/example-chat-cli` — live persistent Ollama chat
+- `@agentforge/example-ollama` — live Ollama health and generation check
+- `@agentforge/example-tool-execution` — deterministic multi-round tool execution
+
+## Core concepts
+
+`AgentForge` owns lifecycle state and exact, case-sensitive registration for
+plugins, profiles, LLM providers, and tools. Registration snapshots public
+metadata. Read-only registries expose immutable views without leaking handlers
+or internal collections.
+
+An `AgentProfile` combines a reusable system prompt with optional model,
+provider, and generation defaults. System prompts are provider input and are not
+stored as conversation messages. A `ConversationEngine` is stateless with
+respect to storage: callers pass a conversation snapshot and receive a new one.
+
+Cancellation uses `AbortSignal` and typed conversation errors. A failed or
+aborted partial turn does not produce a completed conversation snapshot for the
+application to persist.
+
+## Providers
+
+`@agentforge/provider-sdk` defines neutral complete/streaming generation,
+health, request options, errors, and tool contracts. `MockLLMProvider` is fully
+deterministic. `OllamaLLMProvider` maps those contracts to a local Ollama server
+and exposes adapter capabilities without probing a model dynamically.
+
+Request validation problems use `ProviderRequestError`; invalid provider output
+uses `ProviderResponseError`; timeout, abort, and unavailability remain distinct.
+Automated tests use fakes and do not require a live server.
+
+## Conversations and persistence
+
+Conversations and messages are immutable snapshots. The in-memory store supports
+revisioned save/load/list/delete behavior. `@agentforge/storage-filesystem`
+persists versioned store-entry documents using safe Base64URL filenames,
+same-directory temporary writes, flush, and rename. V1 text history and V2 tool
+history remain readable.
+
+Filesystem persistence is local and does not coordinate multi-process writes.
+Tool-enabled history may contain arguments, outputs, failure details, and model
+responses derived from them. Import only trusted documents and apply an
+application-specific retention and access policy.
+
+## Tool calling
+
+Tool definitions use a limited provider-neutral JSON Schema. The executor
+validates arguments before invoking a registered handler, snapshots JSON-compatible
+results, converts expected failures into structured tool results, and executes
+calls sequentially in provider order.
+
+A complete tool-enabled turn is:
+
+```text
+user message -> provider request -> provider tool call -> argument validation
+-> local handler -> tool result -> next provider round -> assistant answer
+-> successful application persistence
 ```
 
-## Provider SDK
-
-Providers supply external AI or infrastructure capabilities. The base Provider
-SDK defines metadata, a standard health check, timeout declarations, and
-platform-native cancellation signals. Concrete contracts such as LLM and speech
-providers extend this foundation.
+Tools are disabled by default. Enable bounded orchestration explicitly:
 
 ```ts
-import {
-  healthyProvider,
-  type Provider,
-  type ProviderHealth,
-  type ProviderRequestOptions,
-} from "@agentforge/provider-sdk";
+import { AgentForge, createConversation } from "@agentforge/core";
+import { registerExampleTools } from "@agentforge/example-tools";
 
-class ExampleProvider implements Provider {
-  readonly metadata = {
-    name: "example",
-    version: "1.0.0",
-  };
+const agent = new AgentForge();
+registerExampleTools(agent);
 
-  async checkHealth(
-    _options?: ProviderRequestOptions,
-  ): Promise<ProviderHealth> {
-    return healthyProvider("Example provider is ready.");
-  }
-}
-```
-
-Provider registration in `AgentForge` is not yet implemented.
-
-## Tool contracts
-
-`@agentforge/provider-sdk` defines provider-neutral, immutable contracts for
-tool definitions, calls, results, asynchronous handlers, and execution context.
-Definitions contain data only; executable handlers remain separate and are not
-registered or invoked automatically in this release.
-
-```ts
-import {
-  createToolDefinition,
-  type ToolHandler,
-} from "@agentforge/provider-sdk";
-
-const definition = createToolDefinition({
-  name: "current_time",
-  description: "Return the current time for a UTC offset.",
-  inputSchema: {
-    type: "object",
-    properties: {
-      utcOffset: {
-        type: "string",
-        description: "UTC offset such as +02:00.",
-      },
-    },
-    required: ["utcOffset"],
-    additionalProperties: false,
-  },
-});
-
-const handler: ToolHandler = async (argumentsValue, context) => {
-  if (context.signal?.aborted) throw context.signal.reason;
-  return { utcOffset: argumentsValue.utcOffset };
-};
-```
-
-Arguments, metadata, outputs, and failure details accept deeply immutable JSON
-values only. Tool inputs use a deliberately limited JSON Schema subset:
-`object`, `array`, `string`, `number`, `integer`, `boolean`, and `null` types;
-primitive `enum` and `const`; object `properties`, `required`, and
-`additionalProperties`; array `items` and length limits; string length limits;
-and numeric minimum/maximum limits. References, schema composition, patterns,
-formats, conditionals, tuple schemas, and recursive schemas are not supported.
-
-Argument validation against a registered definition, handler execution,
-retries, per-tool timeouts, and provider wire-format mapping remain deferred.
-
-## Tool registry
-
-Task-026 defines the provider-neutral tool contracts; the registry associates
-those immutable definitions with handlers. Tools can be registered before
-`AgentForge.start()` while the framework is in the `created` state. Names are
-unique, exact, and case-sensitive, and listings preserve registration order.
-
-```ts
-const agent = new AgentForge().registerTool(definition, handler);
-
-agent.hasTool("current_time");
-agent.getToolDefinition("current_time");
-agent.getRegisteredToolDefinitions();
-```
-
-`getTool()`, `requireTool()`, and `getRegisteredTools()` expose immutable
-definition-handler associations to framework consumers. Plugins receive a
-stable read-only `context.tools` view with the same lookup and listing methods,
-but no registration method. Registration alone does not execute handlers or
-expose tools to LLM providers.
-
-## Tool execution
-
-Tool execution is provider-neutral and explicitly enabled on a conversation
-engine. Definitions are sent without handlers; returned calls are resolved by
-exact name, validated against their registered schemas, and executed
-sequentially. Controlled failures are returned to the provider as structured
-tool results so it can recover in a later round.
-
-```ts
 const engine = agent.createConversationEngine({
   toolExecution: { enabled: true, maxRounds: 8 },
 });
 
-const result = await engine.runTurn({
-  conversation,
-  content: "What time is it?",
+await engine.runTurn({
+  conversation: createConversation(),
+  content: "What is 7 multiplied by 6?",
   model: "tool-capable-model",
 });
 ```
 
-Tools are disabled by default. A turn may use `tools: true`, `tools: false`, or
-an exact-name array to override the engine setting; selected definitions retain
-registry order. Cancellation aborts the entire turn, and the provider-round
-limit prevents infinite tool loops. Streaming emits ordered tool-call start and
-completion events. `OllamaLLMProvider` maps these contracts for tool-capable
-Ollama models, while engine and turn-level tool selection remains opt-in.
-Schema string limits use JavaScript `string.length` (UTF-16 code units); values
-are never coerced and schema defaults are never injected.
+No automatic handler retry or rollback occurs. When the round limit is reached,
+no additional calls execute and the existing typed conversation error is
+surfaced; completed side effects remain completed.
 
-## Example tools
+## Observability and redaction
 
-`@agentforge/example-tools` provides deterministic, side-effect-free examples
-for arithmetic, text formatting, and inventory lookup. They are educational
-tools rather than built-ins: importing the package does not register or enable
-anything, and definitions remain separate from executable handlers.
-
-```ts
-import { AgentForge } from "@agentforge/core";
-import { registerExampleTools } from "@agentforge/example-tools";
-
-const agent = new AgentForge();
-
-registerExampleTools(agent);
-await agent.start();
-
-const engine = agent.createConversationEngine({
-  toolExecution: {
-    enabled: true,
-  },
-});
-```
-
-Applications can also register only the tools they need:
-
-```ts
-import {
-  calculatorToolDefinition,
-  calculatorToolHandler,
-} from "@agentforge/example-tools";
-
-agent.registerTool(calculatorToolDefinition, calculatorToolHandler);
-```
-
-## Tool execution observability
-
-Tool execution observers are opt-in diagnostics for both `runTurn()` and
-`streamTurn()`. They receive immutable start and completion events with the
-conversation ID, engine-scoped turn ID, one-based provider round, one-based
-turn-wide execution index, call ID, and tool name.
-
-```ts
-import type { ToolExecutionObserverEvent } from "@agentforge/core";
-
-const events: ToolExecutionObserverEvent[] = [];
-
-const engine = agent.createConversationEngine({
-  toolExecution: { enabled: true },
-  observability: {
-    toolExecution: (event) => {
-      events.push(event);
-    },
-  },
-});
-```
-
-Completion events and runtime execution records include ISO timestamps and a
-finite non-negative `durationMs`. Duration measures executor work, including
-resolution, validation, handler execution, and result normalization, while
-excluding observer callback execution. Observers run synchronously in configured
-order; their return values are ignored, promises are not awaited, and thrown
-errors are isolated so they cannot alter the tool result or conversation turn.
-
-Without a redactor, events expose full canonical tool calls and results, so
-arguments and outputs may contain sensitive information. Applications must not
-forward them to logs without an appropriate data policy. Observability events
-and execution timing are runtime-only and are not persisted in conversations.
-Existing `tool-call-started` and `tool-call-completed` stream events remain
-separate for user-interface rendering.
-
-## Tool data and redaction
-
-Applications can redact observer-only copies before any observer receives them:
+Tool observers receive immutable, correlated start and completion events.
+Without a redactor, payloads contain full canonical arguments and results.
+Applications can configure observer-only redaction:
 
 ```ts
 import type { ToolExecutionRedactor } from "@agentforge/core";
@@ -358,671 +292,75 @@ const redactor: ToolExecutionRedactor = {
 };
 
 const engine = agent.createConversationEngine({
-  toolExecution: { enabled: true },
   observability: { toolExecution: handleToolEvent, redactor },
 });
 ```
 
-This key-based redactor is only an application example, not a complete security
-policy. Redaction runs once before ordered observer dispatch, and every observer
-receives the same immutable redacted event. A redactor that throws, returns a
-promise, or returns invalid data cannot fail execution: observer arguments fall
-back to `{}`; successful results fall back to `output: null`; failed results
-keep their code but remove details and use `"Tool execution failed."`.
-
-Observer redaction does not change handler inputs, handler outputs, execution
-records, model-visible tool results, stream lifecycle events, or conversation
-messages. Tool-enabled persisted history can contain arguments, outputs,
-failure details, and model responses derived from them. Applications handling
-secrets therefore need an end-to-end storage, access, retention, and logging
-policy. The chat CLI's terminal sanitization prevents control-sequence and
-multiline output injection; it is not secret redaction.
-
-## Tool safety and side effects
-
-Prefer narrow tools with strict argument validation and classify each tool in
-application policy as **read-only**, **idempotent write**, or **non-idempotent
-write**. Examples include inventory lookup, file listing, or volume reading;
-setting volume or a configuration value to a specific value; and sending email,
-deleting a file, purchasing an item, or incrementing a counter, respectively.
-When no classification is recorded, treat the effect as unspecified. The SDK
-does not yet add side-effect metadata or enforce execution policy.
-
-Require explicit application-level confirmation for destructive or high-impact
-non-idempotent operations. Prefer small Windows tools such as
-`get_system_volume`, `set_system_volume`, `mute_system_audio`,
-`open_allowed_application`, and `pause_media`. Avoid general
-`run_shell_command`, `execute_powershell`, or `run_arbitrary_program` tools
-unless strict allowlists, argument validation, user confirmation, audit logging,
-and least privilege protect them. AgentForge does not provide these tools.
-
-## Tool execution retries
-
-AgentForge does not automatically retry tool handlers. Provider transport
-retries and handler retries are different: retrying an LLM request before a
-tool call is observed may be safe under a provider-specific policy, while
-retrying a handler can repeat side effects. Never automatically retry
-non-idempotent tools. Any future retry of an idempotent write must be explicit,
-and external write handlers should use idempotency keys when available.
-
-When the configured maximum tool round limit is reached, no additional calls
-are executed and the last round is not retried. The existing typed conversation
-error is surfaced. Already completed side effects remain visible in records and
-history and generally cannot be rolled back.
-
-The framework validates arguments from each definition's JSON Schema before
-calling its handler. Schema validation does not inject defaults, so
-`format_text` applies its own separator and trimming defaults. Ordinary handler
-errors, such as division by zero or an unknown inventory SKU, are converted by
-`ToolExecutor` into structured failures. The handlers do not access the
-network, filesystem, environment, current time, or random state.
-
-Run the non-network two-round calculator example with `pnpm example:tools`, or
-set `AGENTFORGE_CHAT_TOOLS=example` when starting the interactive chat CLI.
-
-## Conversation model
-
-The core conversation model represents history as immutable snapshots. Appending
-a message returns a new conversation, leaving every previous snapshot unchanged.
-Roles reuse `LLMMessageRole`; IDs and timezone-aware timestamps are generated by
-default.
-
-```ts
-import {
-  appendConversationMessage,
-  conversationToLLMMessages,
-  createConversation,
-} from "@agentforge/core";
-import { LLMMessageRole } from "@agentforge/provider-sdk";
-
-let conversation = createConversation();
-
-conversation = appendConversationMessage(conversation, {
-  role: LLMMessageRole.User,
-  content: "Hello",
-});
-
-const requestMessages = conversationToLLMMessages(conversation);
-```
-
-Conversion preserves role, content, and order while removing conversation-only
-IDs and timestamps. Tests may inject deterministic ID generators and clocks into
-the factory functions. The model does not execute providers or persist data.
-
-## Conversation storage
-
-Conversation persistence is explicit and remains separate from the stateless
-conversation engine. The in-memory implementation stores deep immutable
-snapshots for the current process only; it is not durable across restarts.
-
-```ts
-import {
-  createConversation,
-  createInMemoryConversationStore,
-} from "@agentforge/core";
-
-const store = createInMemoryConversationStore();
-
-const result = await engine.runTurn({
-  conversation: createConversation(),
-  content: "Hello",
-});
-
-const saved = await store.save(result.conversation);
-const loaded = await store.require(saved.conversation.id);
-```
-
-Each successful save increments the current entry's per-conversation revision
-and records a separate `savedAt` timestamp. `get` returns `undefined` when an ID
-is absent, while `require` throws a typed not-found error. `list` provides a
-deterministic paginated view ordered by conversation update time; `delete` and
-`clear` remove entries. Saving an ID after deletion starts again at revision 1
-because historical revisions and tombstones are not retained.
-
-All loaded conversations and list results are immutable snapshots. Future
-database adapters can implement the same `ConversationStore` interface without
-changing conversation execution.
-
-For durable Node.js persistence, install and import the adapter explicitly:
-
-```ts
-import { createFilesystemConversationStore } from "@agentforge/storage-filesystem";
-
-const store = createFilesystemConversationStore({
-  directory: "./agentforge-data",
-});
-
-const result = await engine.runTurn({
-  conversation,
-  content: "Hello",
-});
-
-await store.save(result.conversation);
-```
-
-Core owns the environment-neutral storage contract; the filesystem package owns
-Node-specific durable storage. Engine execution never saves automatically.
-
-## Conversation serialization
-
-Conversation documents use the explicit `agentforge.conversation` kind and V2
-schema version, including tool-call and tool-result history. Serialization
-produces deterministic JSON in compact form by default or with standard
-two-space indentation when `pretty` is enabled. Valid V1 documents remain
-readable and are upgraded to the current in-memory model.
-
-```ts
-const serialized = serializeConversation(conversation, {
-  pretty: true,
-});
-
-const restored = deserializeConversation(serialized);
-```
-
-Decoders validate untrusted strings and already parsed unknown values. Malformed
-JSON, invalid document structure, and unsupported future versions produce
-distinct typed errors. Restored conversations are deeply immutable snapshots.
-
-Conversation-store entries use the separate
-`agentforge.conversation-store-entry` V2 envelope and preserve persistence
-metadata:
-
-```ts
-const saved = await store.save(conversation);
-const serializedEntry = serializeConversationStoreEntry(saved);
-const restoredEntry = deserializeConversationStoreEntry(serializedEntry);
-```
-
-Serialization does not read or write files. The serialized schema is a
-compatibility boundary and is intentionally separate from runtime interfaces.
-
-## Conversation engine
-
-The stateless conversation engine orchestrates an immutable user-to-assistant
-turn, including bounded provider/tool rounds when explicitly enabled. It
-resolves the default or an explicitly named provider while leaving the source
-conversation unchanged.
-
-```ts
-const engine = agent.createConversationEngine();
-const source = createConversation();
-
-const result = await engine.runTurn({
-  conversation: source,
-  content: "Hello",
-  model: "example-model",
-});
-```
-
-Streaming execution is lazy and emits a user-appended `started` snapshot,
-accumulated deltas, and one final immutable conversation after the provider ends
-cleanly.
-
-```ts
-for await (const event of engine.streamTurn({
-  conversation: result.conversation,
-  content: "Continue",
-  model: "example-model",
-})) {
-  if (event.type === "delta") process.stdout.write(event.delta);
-}
-```
-
-The conversation model stores immutable history; the conversation engine
-orchestrates provider execution for one turn. Provider failures reject execution,
-and persistence is not included.
-
-## Agent profiles and system prompts
-
-Agent profiles are immutable, reusable execution configuration. A profile has a
-stable ID and system prompt, and may provide model, provider, and generation
-defaults.
-
-```ts
-const profile = createAgentProfile({
-  id: "concise",
-  systemPrompt: "Answer concisely.",
-  model: "llama3.1:8b",
-  provider: "ollama",
-});
-
-const engine = agent.createConversationEngine({ profile });
-const result = await engine.runTurn({
-  conversation: createConversation(),
-  content: "Explain AgentForge.",
-});
-```
-
-The profile system prompt is prepended only to provider requests and is never
-stored in conversation history. A per-turn profile fully replaces the engine
-default profile. Explicit turn model and provider values override profile
-defaults. Generation settings merge property by property, while turn stop
-sequences replace profile stop sequences instead of being concatenated.
-
-Conversations are immutable user-visible history. Agent profiles provide
-reusable execution defaults and system instructions. The conversation engine
-combines both when calling a provider. Profiles are not persisted or registered
-globally.
-
-## Cancelling conversation turns
-
-Conversation cancellation uses native `AbortSignal`. Pass a per-turn signal
-through `request.signal`, or provide an engine-wide signal when creating the
-engine. Either signal cancels execution.
-
-```ts
-const controller = createConversationTurnController();
-const engine = agent.createConversationEngine({
-  signal: controller.signal,
-});
-
-const turn = engine.runTurn({
-  conversation: createConversation(),
-  content: "Explain cancellation.",
-  model: "example-model",
-});
-
-controller.abort(new Error("Application shutdown"));
-await turn;
-```
-
-The helper is optional. A native controller works for individual turns:
-
-```ts
-const controller = new AbortController();
-
-await engine.runTurn({
-  conversation: createConversation(),
-  content: "Hello",
-  model: "example-model",
-  request: {
-    signal: controller.signal,
-    timeoutMs: 10_000,
-  },
-});
-```
-
-Cancellation rejects the promise or async iterator and never stores a partial
-assistant message. An already-aborted signal takes precedence over turn
-validation. Provider-generated abort errors remain provider errors, while core
-checkpoints use execution-phase diagnostics. Breaking out of a stream as a
-consumer is cleanup, not cancellation. Request timeouts remain provider-owned
-through `timeoutMs`.
-
-## LLM provider contract
-
-LLM providers accept conversation messages with `system`, `user`, and
-`assistant` roles. Generation requests support temperature, top-p, token limit,
-stop sequences, timeouts, and cancellation signals. Providers always support
-complete responses and may additionally expose streaming. Use
-`validateLLMGenerationRequest()` to validate requests received from runtime
-callers.
-
-```ts
-import {
-  LLMFinishReason,
-  LLMMessageRole,
-  healthyProvider,
-  validateLLMGenerationRequest,
-  type LLMGenerationRequest,
-  type LLMGenerationResponse,
-  type LLMProvider,
-  type ProviderHealth,
-} from "@agentforge/provider-sdk";
-
-class ExampleLLMProvider implements LLMProvider {
-  readonly metadata = {
-    name: "example-llm",
-    version: "1.0.0",
-  };
-
-  async checkHealth(): Promise<ProviderHealth> {
-    return healthyProvider();
-  }
-
-  async generate(
-    request: LLMGenerationRequest,
-  ): Promise<LLMGenerationResponse> {
-    validateLLMGenerationRequest(request);
-
-    return {
-      model: request.model,
-      message: {
-        role: LLMMessageRole.Assistant,
-        content: "Example response",
-      },
-      finishReason: LLMFinishReason.Stop,
-    };
-  }
-}
-```
-
-Tool calling is not implemented.
-
-### Streaming LLM responses
-
-Use the capability guard before calling `stream()`, because streaming is an
-optional extension of the base LLM provider contract. Delta events contain
-incremental text; one completed event contains the final normalized response.
-
-```ts
-import { isLLMStreamingProvider } from "@agentforge/provider-sdk";
-
-if (isLLMStreamingProvider(provider)) {
-  for await (const event of provider.stream(request)) {
-    if (event.type === "delta") {
-      process.stdout.write(event.delta);
-    } else {
-      console.log(event.response.finishReason);
-    }
-  }
-}
-```
-
-The stream is lazy: validation and transport work begin when iteration starts.
-Timeouts and `AbortSignal` cancellation apply for the stream's full lifetime.
-
-## Mock LLM provider
-
-Use `@agentforge/provider-mock` for deterministic tests, examples, and local
-development without network access. It uses the same public SDK request
-validator as other LLM providers and records immutable request snapshots for
-later inspection.
-
-```ts
-import { MockLLMProvider } from "@agentforge/provider-mock";
-import { LLMMessageRole } from "@agentforge/provider-sdk";
-
-const provider = new MockLLMProvider({
-  responseContent: "Deterministic response",
-  streamDeltas: ["Deterministic ", "response"],
-});
-
-const response = await provider.generate({
-  model: "test-model",
-  messages: [{ role: LLMMessageRole.User, content: "Hello" }],
-});
-
-console.log(response.message.content);
-console.log(provider.getRequests().length);
-```
-
-The mock supports configurable metadata, response content, deterministic stream
-deltas, finish reason, and health results. It is not intended to simulate tool
-calls, latency, model behavior, or network failures.
-
-## Ollama HTTP client
-
-`@agentforge/ollama-client` is a low-level client for the local Ollama REST API.
-It uses `http://localhost:11434` by default, so Ollama must be running for real
-requests.
-
-```ts
-import { OllamaClient } from "@agentforge/ollama-client";
-
-const client = new OllamaClient();
-
-const version = await client.getVersion();
-const models = await client.listModels();
-
-const response = await client.chat({
-  model: "gemma3",
-  messages: [
-    {
-      role: "user",
-      content: "Hello",
-    },
-  ],
-});
-
-for await (const chunk of client.chatStream({
-  model: "gemma3",
-  messages: [{ role: "user", content: "Hello" }],
-})) {
-  if (chunk.message !== undefined) process.stdout.write(chunk.message.content);
-}
-```
-
-The low-level client can also represent Ollama tool definitions and calls:
-
-```ts
-const toolResponse = await client.chat({
-  model: "llama-model",
-  messages: [
-    {
-      role: "user",
-      content: "What is the weather?",
-    },
-  ],
-  tools: [
-    {
-      type: "function",
-      function: {
-        name: "weather",
-        description: "Get weather.",
-        parameters: {
-          type: "object",
-          properties: {
-            city: {
-              type: "string",
-            },
-          },
-          required: ["city"],
-        },
-      },
-    },
-  ],
-});
-```
-
-The client exposes Ollama wire structures without depending on AgentForge's
-provider-neutral tool contracts.
-
-Both complete and incrementally parsed NDJSON chat responses are supported.
-Per-request cancellation uses `AbortSignal`, while connection, HTTP, response,
-timeout, and cancellation failures use transport-specific errors. This client
-remains the low-level transport used by the Ollama provider.
-
-## Ollama LLM provider
-
-Register `@agentforge/provider-ollama` when Ollama is installed and running and
-the requested model already exists locally:
-
-```ts
-import { AgentForge } from "@agentforge/core";
-import { OllamaLLMProvider } from "@agentforge/provider-ollama";
-import { LLMMessageRole } from "@agentforge/provider-sdk";
-
-const agent = new AgentForge();
-
-agent.registerLLMProvider(
-  new OllamaLLMProvider({
-    clientOptions: {
-      baseUrl: "http://localhost:11434",
-    },
-  }),
-  {
-    default: true,
-  },
-);
-
-const provider = agent.getDefaultLLMProvider();
-
-const response = await provider?.generate({
-  model: "llama3.1:8b",
-  messages: [
-    {
-      role: LLMMessageRole.User,
-      content: "Hello",
-    },
-  ],
-});
-```
-
-Complete and streaming generation share the same AgentForge-to-Ollama request
-mapping. Timeout and cancellation use provider request options, including for
-the full stream lifetime. Transport errors are converted to provider SDK errors.
-Registration does not perform a health check or download models automatically;
-automatic retries are not implemented.
-
-`OllamaLLMProvider` supports provider-neutral tool definitions, tool-call
-history, tool results, and complete or streaming tool-call responses. Tools are
-still opt-in through `ConversationEngine`, and the selected Ollama model must
-support tool calling. Ollama does not supply call IDs in the current wire
-contract, so each provider instance generates ordered invocation-local IDs.
-
-```ts
-import { AgentForge } from "@agentforge/core";
-import { OllamaLLMProvider } from "@agentforge/provider-ollama";
-import { createToolDefinition } from "@agentforge/provider-sdk";
-
-const agent = new AgentForge();
-
-agent.registerLLMProvider(new OllamaLLMProvider(), { default: true });
-agent.registerTool(
-  createToolDefinition({
-    name: "weather",
-    description: "Get weather for a city.",
-    inputSchema: {
-      type: "object",
-      properties: { city: { type: "string" } },
-      required: ["city"],
-      additionalProperties: false,
-    },
-  }),
-  async ({ city }) => ({ city, temperature: 21 }),
-);
-
-await agent.start();
-
-const engine = agent.createConversationEngine({
-  toolExecution: { enabled: true },
-});
-```
-
-Advertising tool support means the adapter understands Ollama's tool
-wire semantics; it does not imply that every installed model supports tools.
-
-## Ollama model compatibility
-
-`OllamaLLMProvider.capabilities.tools === true` describes the adapter's support
-for Ollama tool wire contracts, not a guarantee about the selected model. Tool
-compatibility depends on the installed model and Ollama version, and an
-incompatible model may reject an otherwise valid tool request. Text-only mode
-remains available. The CLI surfaces the provider error instead of silently
-disabling tools, and AgentForge intentionally has no model allowlist or dynamic
-capability probe.
-
-A manual smoke test is the practical compatibility check: enable example tools,
-ask the model to calculate a deterministic expression, confirm that tool start
-and completion lines appear, and confirm that the model produces a final answer.
-This is separate from the standard provider health check.
-
-Configure a model-aware health check when readiness requires a specific local
-model:
-
-```ts
-const provider = new OllamaLLMProvider({
-  clientOptions: {
-    baseUrl: "http://localhost:11434",
-  },
-  healthCheck: {
-    model: "llama3.1:8b",
-  },
-});
-
-const health = await provider.checkHealth({
-  timeoutMs: 5_000,
-});
-```
-
-Without `healthCheck.model`, only `/api/version` is checked. With a model, the
-provider also checks `/api/tags`: an exact, case-sensitive match is healthy, a
-missing model is degraded, and an unreachable server is unavailable. Health
-checks are explicit and are not triggered by registration. Models are never
-downloaded automatically.
-
-Run the optional live example after installing Ollama and the configured model:
+Redaction runs once before ordered observer dispatch. Exceptions, invalid
+returns, promises, rejected promises, and hostile thenables are isolated.
+Fallback observer arguments are `{}`; successful output becomes `null`; failed
+results keep their code, remove details, and use a generic message.
+
+Redaction does not alter handler data, model-visible results, execution records,
+stream events, or persisted history. CLI sanitization prevents multiline and
+ANSI/control-sequence injection but is not secret redaction.
+
+## Safety model
+
+- Only registered tools can execute, and arguments are validated first.
+- Tool handlers are application code and run with the application's privileges.
+- Prefer narrow tools and strict allowlists; avoid unrestricted shell handlers.
+- Classify tools as read-only, idempotent write, or non-idempotent write.
+- Confirm destructive/high-impact actions in the application before execution.
+- AgentForge provides no sandbox, permission engine, or formal security boundary.
+- Tool handlers are not automatically retried and side effects are not rolled back.
+- Persisted conversations and execution records may contain sensitive values.
+
+## Development
 
 ```bash
-pnpm example:ollama
+pnpm check
+pnpm build
+pnpm test
 ```
 
-Override its defaults with environment variables when needed:
+Run the complete deterministic MVP gate locally:
 
 ```bash
-OLLAMA_BASE_URL=http://localhost:11434 OLLAMA_MODEL=llama3.1:8b pnpm example:ollama
+pnpm verify:mvp
 ```
 
-The model must already be installed locally. Missing-model API responses are
-commonly HTTP `404`; Ollama API errors use a JSON `error` property.
+The command performs formatting/lint checks, all builds and tests, both
+deterministic examples, and built-package API smoke checks. It does not start
+Ollama or download a model. See [MVP readiness](docs/MVP.md) for the release and
+optional manual smoke-test checklists.
 
-## Registering LLM providers
+## Testing
 
-Register providers and select a default before starting AgentForge:
+The Vitest suite covers lifecycle, configuration, profiles, provider contracts,
+complete and streaming conversations, cancellation, storage, serialization,
+tools, Ollama mapping, CLI behavior, observability, redaction, and terminal
+hardening. Tests use deterministic providers, fake transports, isolated
+temporary directories, and restored global state.
 
-```ts
-agent.registerLLMProvider(provider, {
-  default: true,
-});
+## Current limitations
 
-const defaultProvider = agent.getDefaultLLMProvider();
-```
+- Ollama is the only implemented real LLM provider.
+- Tool compatibility varies by installed model and Ollama version.
+- There is no dynamic model capability probing or hardcoded model allowlist.
+- There is no voice, Windows tool library, confirmation/permission engine,
+  retry engine, sandbox, transaction rollback, distributed execution, or GUI.
+- Filesystem storage is local and single-process oriented.
+- Package publication metadata/documentation still requires a release review.
+- APIs may evolve before 1.0.0.
 
-Provider names are exact and case-sensitive. Metadata is validated and
-snapshotted during registration, and no provider becomes the default
-automatically. Plugins receive a read-only provider registry through
-`PluginContext`. Registration is allowed only before startup and does not
-perform a health check.
+## Roadmap after MVP
 
-## Plugin lifecycle
+Future capability tracks include desktop tools, voice I/O, permission and
+confirmation policy, additional providers, structured logging exporters,
+package publication, graphical interfaces, and remote/distributed execution.
+These are outside the 0.1.0 MVP baseline.
 
-Plugins are registered before the framework starts. AgentForge initializes them
-sequentially in registration order and shuts them down sequentially in reverse
-order. Plugin metadata requires a unique, case-sensitive name and a Semantic
-Versioning 2.0.0 version. A non-empty description is optional. AgentForge
-validates and snapshots metadata during registration.
+## License
 
-```ts
-import { AgentForge } from "@agentforge/core";
-import type { Plugin } from "@agentforge/plugin-sdk";
-
-const examplePlugin: Plugin = {
-  metadata: {
-    name: "example",
-    version: "1.0.0",
-    description: "Demonstrates the AgentForge plugin lifecycle.",
-  },
-
-  async initialize(context) {
-    context.logger.info("Plugin initialized");
-  },
-
-  async shutdown() {
-    // Release plugin resources.
-  },
-};
-
-const agent = new AgentForge();
-
-agent.register(examplePlugin);
-
-await agent.start();
-await agent.stop();
-```
-
-## Inspecting registered plugins
-
-The registry exposes validated metadata snapshots without exposing plugin
-instances or mutable internal collections.
-
-```ts
-agent.hasPlugin("example");
-
-const metadata = agent.getPluginMetadata("example");
-
-const plugins = agent.getRegisteredPlugins();
-```
-
-Lookups are exact and case-sensitive. The returned list is read-only, preserves
-registration order, and is available throughout the framework lifecycle.
+AgentForge is licensed under the MIT License. See [LICENSE](LICENSE).

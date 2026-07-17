@@ -19,3 +19,7 @@ input:
 pnpm build
 pnpm example:tools
 ```
+
+It creates no files and requires no cleanup. The high-level output contains the
+final answer, two provider rounds, the calculator result, and paired observer
+start/completion summaries.

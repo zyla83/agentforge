@@ -1,5 +1,8 @@
 # Basic Agent Example
 
+This is a deterministic, non-interactive example. It requires no Ollama server,
+network access, environment variables, or persistent data directory.
+
 This example demonstrates validated instance configuration, the AgentForge
 plugin lifecycle with two plugins, stateless complete and streaming conversation
 turns, deterministic turn cancellation, an immutable agent profile with a
@@ -24,3 +27,4 @@ immutable completed conversation, an incrementally streamed turn, their recorded
 request counts, the selected profile without storing its system prompt in the
 conversation, cancellation before a provider call, reverse-order shutdown, and
 the stopped state.
+It creates no files and requires no cleanup.
