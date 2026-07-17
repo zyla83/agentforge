@@ -65,3 +65,6 @@
 - Versioned V1 JSON documents for conversations and conversation-store entries
 - Deterministic compact and pretty serialization with immutable round-trip restoration
 - Safe unknown-value decoding with typed syntax, validation, and unsupported-version errors
+- Node.js filesystem conversation-store adapter with restart persistence
+- Atomic versioned store-entry files using safe Base64URL conversation filenames
+- Deterministic filesystem pagination with typed corruption, initialization, and I/O errors

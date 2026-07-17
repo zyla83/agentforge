@@ -73,6 +73,7 @@ generation cancels the active response; Ctrl+C at the prompt exits the CLI.
 - `packages/provider-ollama` - AgentForge LLM provider backed by Ollama
 - `packages/provider-sdk` - base contracts for external capability providers
 - `packages/shared` - shared framework utilities
+- `packages/storage-filesystem` - durable Node.js conversation-store adapter
 - `examples/basic-agent` - runnable plugin lifecycle example
 - `examples/chat-cli` - interactive multi-turn Ollama chat application
 - `examples/ollama-agent` - optional live Ollama health and generation example
@@ -217,6 +218,26 @@ because historical revisions and tombstones are not retained.
 All loaded conversations and list results are immutable snapshots. Future
 database adapters can implement the same `ConversationStore` interface without
 changing conversation execution.
+
+For durable Node.js persistence, install and import the adapter explicitly:
+
+```ts
+import { createFilesystemConversationStore } from "@agentforge/storage-filesystem";
+
+const store = createFilesystemConversationStore({
+  directory: "./agentforge-data",
+});
+
+const result = await engine.runTurn({
+  conversation,
+  content: "Hello",
+});
+
+await store.save(result.conversation);
+```
+
+Core owns the environment-neutral storage contract; the filesystem package owns
+Node-specific durable storage. Engine execution never saves automatically.
 
 ## Conversation serialization
 

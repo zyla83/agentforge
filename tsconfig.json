@@ -9,6 +9,7 @@
     { "path": "./packages/provider-ollama" },
     { "path": "./packages/provider-sdk" },
     { "path": "./packages/shared" },
+    { "path": "./packages/storage-filesystem" },
     { "path": "./packages/core" },
     { "path": "./examples/basic-agent" },
     { "path": "./examples/chat-cli" },

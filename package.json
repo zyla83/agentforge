@@ -13,7 +13,8 @@
     "example:chat": "pnpm --filter @agentforge/example-chat-cli start",
     "example:ollama": "pnpm --filter @agentforge/example-ollama start",
     "format": "biome format --write .",
-    "test": "pnpm run build && vitest run"
+    "test": "pnpm run build && vitest run",
+    "test:storage-filesystem": "vitest run tests/storage-filesystem"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
