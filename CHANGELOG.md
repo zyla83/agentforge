@@ -88,3 +88,6 @@
 - V2 conversation and store-entry serialization with backward-compatible V1 decoding
 - Ollama tool definitions, tool-call messages, tool results, and JSON wire contracts
 - Tool-aware Ollama request serialization plus complete and streaming response parsing
+- Ollama provider tool capability and provider-neutral definition/message mapping
+- Immutable Ollama tool-call response mapping with provider-instance call IDs
+- Conservative streaming tool-call aggregation with mixed-output rejection

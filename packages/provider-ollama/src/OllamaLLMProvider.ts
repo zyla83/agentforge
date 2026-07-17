@@ -13,6 +13,7 @@ import type {
   OllamaChatStreamChunk,
   OllamaModel,
   OllamaRequestOptions,
+  OllamaToolCall,
   OllamaVersion,
 } from "@agentforge/ollama-client";
 import {
@@ -41,6 +42,7 @@ import type {
   OllamaLLMProviderOptions,
 } from "./OllamaLLMProviderOptions.js";
 import { mapOllamaClientError } from "./errors/mapOllamaClientError.js";
+import { OllamaGenerationSequenceAllocator } from "./internal/OllamaGenerationSequenceAllocator.js";
 import {
   mapGenerationRequest,
   mapRequestOptions,
@@ -71,9 +73,10 @@ export class OllamaLLMProvider implements LLMStreamingProvider {
   readonly metadata: Readonly<ProviderMetadata>;
   readonly capabilities: Readonly<LLMProviderCapabilities> = Object.freeze({
     streaming: true,
-    tools: false,
+    tools: true,
   });
   private readonly client: CompatibleOllamaClient;
+  private readonly generationSequences: OllamaGenerationSequenceAllocator;
   private readonly healthCheck: Readonly<OllamaHealthCheckOptions> | undefined;
 
   constructor(options?: OllamaLLMProviderOptions) {
@@ -118,6 +121,9 @@ export class OllamaLLMProvider implements LLMStreamingProvider {
       version,
       description,
     }) as Readonly<ProviderMetadata>;
+    this.generationSequences = new OllamaGenerationSequenceAllocator(
+      resolvedName,
+    );
   }
 
   async checkHealth(options?: ProviderRequestOptions): Promise<ProviderHealth> {
@@ -189,28 +195,33 @@ export class OllamaLLMProvider implements LLMStreamingProvider {
     request: LLMGenerationRequest,
   ): Promise<LLMGenerationResponse> {
     validateLLMGenerationRequest(request);
-    assertToolsUnsupported(this.metadata.name, request);
     throwIfProviderRequestAborted(this.metadata.name, request.request);
-    const mapped = mapGenerationRequest(request);
+    const generationSequence = this.generationSequences.allocate();
 
     try {
+      const mapped = mapGenerationRequest(request);
       const response = await this.client.chat(mapped.request, mapped.options);
-      return mapGenerationResponse(response);
+      return mapGenerationResponse(response, {
+        generationSequence,
+        providerName: this.metadata.name,
+      });
     } catch (error) {
+      if (error instanceof ProviderError) throw error;
       throw mapOllamaClientError(this.metadata.name, error);
     }
   }
 
   async *stream(request: LLMGenerationRequest): AsyncIterable<LLMStreamEvent> {
     validateLLMGenerationRequest(request);
-    assertToolsUnsupported(this.metadata.name, request);
     throwIfProviderRequestAborted(this.metadata.name, request.request);
-    const mapped = mapGenerationRequest(request);
+    const generationSequence = this.generationSequences.allocate();
     let model: string | undefined;
     let content = "";
+    const toolCalls: Readonly<OllamaToolCall>[] = [];
     let completedResponse: Readonly<LLMGenerationResponse> | undefined;
 
     try {
+      const mapped = mapGenerationRequest(request);
       for await (const chunk of this.client.chatStream(
         mapped.request,
         mapped.options,
@@ -231,8 +242,33 @@ export class OllamaLLMProvider implements LLMStreamingProvider {
           model = chunk.model;
         }
         const resolvedModel = model ?? request.model;
-        const delta = chunk.message?.content;
-        if (delta !== undefined && delta.length > 0) {
+        const message = chunk.message;
+        const chunkToolCalls =
+          message !== undefined && "toolCalls" in message
+            ? message.toolCalls
+            : undefined;
+        const delta = message?.content;
+        if (chunkToolCalls !== undefined) {
+          if (delta !== undefined && delta.length > 0) {
+            throw streamResponseError(
+              this.metadata.name,
+              "returned assistant text together with tool calls",
+            );
+          }
+          if (content.length > 0) {
+            throw streamResponseError(
+              this.metadata.name,
+              "returned tool calls after assistant text",
+            );
+          }
+          toolCalls.push(...chunkToolCalls);
+        } else if (delta !== undefined && delta.length > 0) {
+          if (toolCalls.length > 0) {
+            throw streamResponseError(
+              this.metadata.name,
+              "returned assistant text after tool calls",
+            );
+          }
           content += delta;
           yield Object.freeze({
             type: "delta",
@@ -241,20 +277,33 @@ export class OllamaLLMProvider implements LLMStreamingProvider {
           });
         }
         if (chunk.done) {
-          completedResponse = mapGenerationResponse({
-            model: resolvedModel,
-            message: { role: "assistant", content },
-            done: true,
-            ...(chunk.doneReason === undefined
-              ? {}
-              : { doneReason: chunk.doneReason }),
-            ...(chunk.promptEvalCount === undefined
-              ? {}
-              : { promptEvalCount: chunk.promptEvalCount }),
-            ...(chunk.evalCount === undefined
-              ? {}
-              : { evalCount: chunk.evalCount }),
-          });
+          completedResponse = mapGenerationResponse(
+            {
+              model: resolvedModel,
+              message:
+                toolCalls.length === 0
+                  ? { role: "assistant", content }
+                  : {
+                      role: "assistant",
+                      content: "",
+                      toolCalls: Object.freeze([...toolCalls]),
+                    },
+              done: true,
+              ...(chunk.doneReason === undefined
+                ? {}
+                : { doneReason: chunk.doneReason }),
+              ...(chunk.promptEvalCount === undefined
+                ? {}
+                : { promptEvalCount: chunk.promptEvalCount }),
+              ...(chunk.evalCount === undefined
+                ? {}
+                : { evalCount: chunk.evalCount }),
+            },
+            {
+              generationSequence,
+              providerName: this.metadata.name,
+            },
+          );
         }
       }
       if (completedResponse === undefined) {
@@ -271,23 +320,6 @@ export class OllamaLLMProvider implements LLMStreamingProvider {
       if (error instanceof ProviderError) throw error;
       throw mapOllamaClientError(this.metadata.name, error);
     }
-  }
-}
-
-function assertToolsUnsupported(
-  providerName: string,
-  request: LLMGenerationRequest,
-): void {
-  if (
-    request.tools !== undefined ||
-    request.messages.some(
-      (message) => message.role === "tool" || "toolCalls" in message,
-    )
-  ) {
-    throw new ProviderRequestError(
-      providerName,
-      `Provider "${resolveProviderName(providerName)}" does not support tool calling.`,
-    );
   }
 }
 

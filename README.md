@@ -250,8 +250,8 @@ Tools are disabled by default. A turn may use `tools: true`, `tools: false`, or
 an exact-name array to override the engine setting; selected definitions retain
 registry order. Cancellation aborts the entire turn, and the provider-round
 limit prevents infinite tool loops. Streaming emits ordered tool-call start and
-completion events. The Ollama provider remains tool-unsupported until Task-030,
-so current Ollama chat sessions continue using text generation only.
+completion events. `OllamaLLMProvider` maps these contracts for tool-capable
+Ollama models, while engine and turn-level tool selection remains opt-in.
 Schema string limits use JavaScript `string.length` (UTF-16 code units); values
 are never coerced and schema defaults are never injected.
 
@@ -650,8 +650,8 @@ const toolResponse = await client.chat({
 });
 ```
 
-This task adds Ollama wire support only. AgentForge's Ollama provider does not
-advertise or execute tools until Task-030.
+The client exposes Ollama wire structures without depending on AgentForge's
+provider-neutral tool contracts.
 
 Both complete and incrementally parsed NDJSON chat responses are supported.
 Per-request cancellation uses `AbortSignal`, while connection, HTTP, response,
@@ -698,7 +698,46 @@ Complete and streaming generation share the same AgentForge-to-Ollama request
 mapping. Timeout and cancellation use provider request options, including for
 the full stream lifetime. Transport errors are converted to provider SDK errors.
 Registration does not perform a health check or download models automatically;
-tool calling and automatic retries are not implemented.
+automatic retries are not implemented.
+
+`OllamaLLMProvider` supports provider-neutral tool definitions, tool-call
+history, tool results, and complete or streaming tool-call responses. Tools are
+still opt-in through `ConversationEngine`, and the selected Ollama model must
+support tool calling. Ollama does not supply call IDs in the current wire
+contract, so each provider instance generates ordered invocation-local IDs.
+
+```ts
+import { AgentForge } from "@agentforge/core";
+import { OllamaLLMProvider } from "@agentforge/provider-ollama";
+import { createToolDefinition } from "@agentforge/provider-sdk";
+
+const agent = new AgentForge();
+
+agent.registerLLMProvider(new OllamaLLMProvider(), { default: true });
+agent.registerTool(
+  createToolDefinition({
+    name: "weather",
+    description: "Get weather for a city.",
+    inputSchema: {
+      type: "object",
+      properties: { city: { type: "string" } },
+      required: ["city"],
+      additionalProperties: false,
+    },
+  }),
+  async ({ city }) => ({ city, temperature: 21 }),
+);
+
+await agent.start();
+
+const engine = agent.createConversationEngine({
+  toolExecution: { enabled: true },
+});
+```
+
+Built-in example tools and chat CLI tool integration are deferred to later
+tasks. Advertising tool support means the adapter understands Ollama's tool
+wire semantics; it does not imply that every installed model supports tools.
 
 Configure a model-aware health check when readiness requires a specific local
 model:
