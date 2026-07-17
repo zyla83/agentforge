@@ -13,7 +13,10 @@ import type {
   ToolRegistry,
   ToolResult,
 } from "@agentforge/provider-sdk";
-import type { ToolExecutionClock } from "./ToolExecutionObservability.js";
+import type {
+  ToolExecutionClock,
+  ToolExecutionRedactor,
+} from "./ToolExecutionObservability.js";
 import type { ToolExecutionOptions, ToolExecutor } from "./ToolExecutor.js";
 import type { ToolExecutionRecord } from "./ToolExecutor.js";
 import {
@@ -21,6 +24,7 @@ import {
   ToolExecutionAbortedError,
   ToolExecutionPhase,
 } from "./errors/index.js";
+import { ToolExecutionEventRedactor } from "./internal/ToolExecutionEventRedactor.js";
 import { ToolExecutionObserverDispatcher } from "./internal/ToolExecutionObserverDispatcher.js";
 import { defaultToolExecutionClock } from "./internal/defaultToolExecutionClock.js";
 import {
@@ -34,11 +38,13 @@ import { validateToolArguments } from "./validateToolArguments.js";
 interface ToolExecutorImplOptions {
   readonly observerDispatcher?: ToolExecutionObserverDispatcher;
   readonly clock?: ToolExecutionClock;
+  readonly redactor?: Readonly<ToolExecutionRedactor>;
 }
 
 export class ToolExecutorImpl implements ToolExecutor {
   private readonly observerDispatcher: ToolExecutionObserverDispatcher;
   private readonly clock: ToolExecutionClock;
+  private readonly eventRedactor: ToolExecutionEventRedactor | undefined;
 
   constructor(
     private readonly tools: ToolRegistry,
@@ -47,6 +53,10 @@ export class ToolExecutorImpl implements ToolExecutor {
     this.observerDispatcher =
       options.observerDispatcher ?? new ToolExecutionObserverDispatcher([]);
     this.clock = options.clock ?? defaultToolExecutionClock;
+    this.eventRedactor =
+      options.redactor === undefined
+        ? undefined
+        : new ToolExecutionEventRedactor(options.redactor);
   }
 
   async execute(
@@ -70,8 +80,13 @@ export class ToolExecutorImpl implements ToolExecutor {
     );
     const startedAt = readWallClock(this.clock);
     if (this.observerDispatcher.enabled) {
+      const event = createToolExecutionStartedEvent({
+        context,
+        call: snapshot,
+        startedAt,
+      });
       this.observerDispatcher.emit(
-        createToolExecutionStartedEvent({ context, call: snapshot, startedAt }),
+        this.eventRedactor?.redactStarted(event) ?? event,
       );
     }
     const monotonicStart = readMonotonicClock(this.clock);
@@ -88,7 +103,10 @@ export class ToolExecutorImpl implements ToolExecutor {
       durationMs,
     });
     if (this.observerDispatcher.enabled) {
-      this.observerDispatcher.emit(createToolExecutionCompletedEvent(record));
+      const event = createToolExecutionCompletedEvent(record);
+      this.observerDispatcher.emit(
+        this.eventRedactor?.redactCompleted(event) ?? event,
+      );
     }
     return record;
   }

@@ -2,6 +2,7 @@ import {
   ProviderAbortError,
   ProviderError,
   ProviderRequestError,
+  ProviderResponseError,
   ProviderTimeoutError,
   ProviderUnavailableError,
 } from "@agentforge/provider-sdk";
@@ -72,6 +73,19 @@ describe("provider errors", () => {
     expect(error.providerName).toBe("ollama");
   });
 
+  it("creates a deterministic response error", () => {
+    const error = new ProviderResponseError(
+      "ollama",
+      "Provider response was invalid.",
+    );
+
+    expect(error.name).toBe("ProviderResponseError");
+    expect(error.message).toBe("Provider response was invalid.");
+    expect(error.providerName).toBe("ollama");
+    expect(error).toBeInstanceOf(ProviderError);
+    expect(error).not.toBeInstanceOf(ProviderRequestError);
+  });
+
   it("creates a deterministic timeout error and exposes its timeout", () => {
     const error = new ProviderTimeoutError("ollama", 5000);
 
@@ -95,6 +109,7 @@ describe("provider errors", () => {
     const errors = [
       new ProviderUnavailableError("example"),
       new ProviderRequestError("example", "Request failed."),
+      new ProviderResponseError("example", "Response failed."),
       new ProviderTimeoutError("example", 1000),
       new ProviderAbortError("example"),
     ];
@@ -110,6 +125,7 @@ describe("provider errors", () => {
       new ProviderError("Failed.", "example", { cause }),
       new ProviderUnavailableError("example", undefined, { cause }),
       new ProviderRequestError("example", "Failed.", { cause }),
+      new ProviderResponseError("example", "Failed.", { cause }),
       new ProviderTimeoutError("example", 1000, { cause }),
       new ProviderAbortError("example", { cause }),
     ];

@@ -8,6 +8,7 @@ import {
   LLMFinishReason,
   LLMMessageRole,
   ProviderRequestError,
+  ProviderResponseError,
   createToolCall,
   createToolDefinition,
   createToolResult,
@@ -303,10 +304,38 @@ describe("OllamaLLMProvider complete tool responses", () => {
       ),
     ).rejects.toEqual(
       expect.objectContaining({
-        name: "ProviderRequestError",
+        name: "ProviderResponseError",
         message:
           'Provider "ollama" returned assistant text together with tool calls.',
       }),
+    );
+    await expect(
+      new OllamaLLMProvider({ client: asOllamaClient(client) }).generate(
+        baseRequest,
+      ),
+    ).rejects.toBeInstanceOf(ProviderResponseError);
+  });
+
+  it("classifies invalid provider tool-call data as a response error", async () => {
+    const client = new FakeOllamaClient();
+    client.chatResult = toolResponse([
+      { function: { name: "", arguments: { secret: "must-not-leak" } } },
+    ]);
+    const generate = () =>
+      new OllamaLLMProvider({ client: asOllamaClient(client) }).generate(
+        baseRequest,
+      );
+
+    await expect(generate()).rejects.toMatchObject({
+      name: "ProviderResponseError",
+      providerName: "ollama",
+      message: 'Provider "ollama" returned invalid tool call data.',
+    });
+    await expect(generate()).rejects.toBeInstanceOf(ProviderResponseError);
+    await expect(generate()).rejects.not.toBeInstanceOf(ProviderRequestError);
+    await expect(generate()).rejects.not.toHaveProperty(
+      "message",
+      expect.stringContaining("must-not-leak"),
     );
   });
 });
@@ -486,9 +515,23 @@ describe("OllamaLLMProvider streaming tool calls", () => {
       ),
     ).rejects.toEqual(
       expect.objectContaining({
-        name: "ProviderRequestError",
+        name: "ProviderResponseError",
         message: expect.stringContaining(detail),
       }),
     );
+    await expect(
+      collect(
+        new OllamaLLMProvider({ client: asOllamaClient(client) }).stream(
+          baseRequest,
+        ),
+      ),
+    ).rejects.toBeInstanceOf(ProviderResponseError);
+    await expect(
+      collect(
+        new OllamaLLMProvider({ client: asOllamaClient(client) }).stream(
+          baseRequest,
+        ),
+      ),
+    ).rejects.not.toBeInstanceOf(ProviderRequestError);
   });
 });

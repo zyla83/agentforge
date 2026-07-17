@@ -70,6 +70,11 @@ messages and tool-result messages. Loading does not strip historical tool
 messages or change the startup mode; continuing tool-enabled history in `off`
 mode may require matching tool configuration. There is no runtime tool toggle.
 
+Status previews are bounded, single-line, Unicode-safe, and strip terminal
+control and ANSI sequences. This protects terminal layout but does not remove
+secrets. Persisted history still contains full tool calls and results, so use an
+appropriate storage and access policy for sensitive conversations.
+
 Example prompts:
 
 ```text
@@ -81,6 +86,11 @@ Show warehouse availability for AF-KEYBOARD-01.
 ```
 
 The model decides whether to call a tool for any prompt.
+
+To smoke-test model compatibility, enable example tools, ask for a deterministic
+calculation, confirm the tool lifecycle lines, and confirm a final answer. The
+adapter supports Ollama's tool wire contract, but support by a particular model
+depends on that model and the installed Ollama version.
 
 The terminal status lines consume `streamTurn()` lifecycle events. They do not
 enable the separate programmatic tool execution observer API, so tool status is

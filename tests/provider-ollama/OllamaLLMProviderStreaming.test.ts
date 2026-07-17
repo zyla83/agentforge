@@ -11,6 +11,7 @@ import {
   LLMMessageRole,
   ProviderAbortError,
   ProviderRequestError,
+  ProviderResponseError,
   ProviderTimeoutError,
   ProviderUnavailableError,
   isLLMStreamingProvider,
@@ -178,7 +179,7 @@ describe("OllamaLLMProvider streaming", () => {
           createRequest(),
         ),
       ),
-    ).rejects.toBeInstanceOf(ProviderRequestError);
+    ).rejects.toBeInstanceOf(ProviderResponseError);
   });
 
   it("rejects conflicting model names", async () => {
@@ -194,7 +195,7 @@ describe("OllamaLLMProvider streaming", () => {
           createRequest(),
         ),
       ),
-    ).rejects.toMatchObject({ name: "ProviderRequestError" });
+    ).rejects.toMatchObject({ name: "ProviderResponseError" });
   });
 
   it("is exposed through the streaming capability guard", () => {
@@ -218,7 +219,7 @@ describe("OllamaLLMProvider streaming errors", () => {
       new OllamaHttpError("/api/chat", 500, "Internal Server Error"),
       ProviderRequestError,
     ],
-    [new OllamaResponseError("/api/chat", ["invalid"]), ProviderRequestError],
+    [new OllamaResponseError("/api/chat", ["invalid"]), ProviderResponseError],
   ])(
     "maps a transport error emitted during streaming",
     async (error, expected) => {
@@ -287,7 +288,7 @@ describe("OllamaLLMProvider streaming errors", () => {
           events.push(event);
         }
       })(),
-    ).rejects.toBeInstanceOf(ProviderRequestError);
+    ).rejects.toBeInstanceOf(ProviderResponseError);
 
     expect(events).toEqual([
       { type: "delta", model: "llama3.1:8b", delta: "partial" },

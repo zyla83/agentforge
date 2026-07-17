@@ -11,6 +11,7 @@ import {
   LLMMessageRole,
   ProviderAbortError,
   ProviderRequestError,
+  ProviderResponseError,
   ProviderTimeoutError,
   ProviderUnavailableError,
 } from "@agentforge/provider-sdk";
@@ -132,23 +133,33 @@ describe("OllamaLLMProvider generation errors", () => {
   });
 
   it.each([
-    [new OllamaRequestError(["invalid"]), "produced an invalid Ollama request"],
+    [
+      new OllamaRequestError(["invalid"]),
+      "produced an invalid Ollama request",
+      ProviderRequestError,
+    ],
     [
       new OllamaResponseError("/api/chat", ["invalid"]),
       "received an invalid response from Ollama",
+      ProviderResponseError,
     ],
-    [new Error("unexpected"), "request failed unexpectedly"],
-  ])("maps %s to ProviderRequestError", async (error, message) => {
-    await expect(generateWithError(error)).rejects.toEqual(
-      expect.objectContaining({
-        name: "ProviderRequestError",
-        providerName: "ollama",
-        message: expect.stringContaining(message),
-        cause: error,
-      }),
-    );
-    await expect(generateWithError(error)).rejects.toBeInstanceOf(
+    [
+      new Error("unexpected"),
+      "request failed unexpectedly",
       ProviderRequestError,
-    );
-  });
+    ],
+  ])(
+    "maps %s to the correct provider boundary",
+    async (error, message, ErrorType) => {
+      await expect(generateWithError(error)).rejects.toEqual(
+        expect.objectContaining({
+          name: ErrorType.name,
+          providerName: "ollama",
+          message: expect.stringContaining(message),
+          cause: error,
+        }),
+      );
+      await expect(generateWithError(error)).rejects.toBeInstanceOf(ErrorType);
+    },
+  );
 });

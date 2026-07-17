@@ -331,12 +331,84 @@ excluding observer callback execution. Observers run synchronously in configured
 order; their return values are ignored, promises are not awaited, and thrown
 errors are isolated so they cannot alter the tool result or conversation turn.
 
-Events expose canonical tool calls and results, so arguments and outputs may
-contain sensitive information. Applications must not forward them to logs
-without an appropriate data policy. Redaction is deferred to Task-034.
-Observability events and execution timing are runtime-only and are not persisted
-in conversations. Existing `tool-call-started` and `tool-call-completed` stream
-events remain separate for user-interface rendering.
+Without a redactor, events expose full canonical tool calls and results, so
+arguments and outputs may contain sensitive information. Applications must not
+forward them to logs without an appropriate data policy. Observability events
+and execution timing are runtime-only and are not persisted in conversations.
+Existing `tool-call-started` and `tool-call-completed` stream events remain
+separate for user-interface rendering.
+
+## Tool data and redaction
+
+Applications can redact observer-only copies before any observer receives them:
+
+```ts
+import type { ToolExecutionRedactor } from "@agentforge/core";
+
+const redactor: ToolExecutionRedactor = {
+  redactArguments(argumentsValue) {
+    return Object.fromEntries(
+      Object.entries(argumentsValue).map(([key, value]) =>
+        /token|password|secret/i.test(key)
+          ? [key, "[REDACTED]"]
+          : [key, value],
+      ),
+    );
+  },
+};
+
+const engine = agent.createConversationEngine({
+  toolExecution: { enabled: true },
+  observability: { toolExecution: handleToolEvent, redactor },
+});
+```
+
+This key-based redactor is only an application example, not a complete security
+policy. Redaction runs once before ordered observer dispatch, and every observer
+receives the same immutable redacted event. A redactor that throws, returns a
+promise, or returns invalid data cannot fail execution: observer arguments fall
+back to `{}`; successful results fall back to `output: null`; failed results
+keep their code but remove details and use `"Tool execution failed."`.
+
+Observer redaction does not change handler inputs, handler outputs, execution
+records, model-visible tool results, stream lifecycle events, or conversation
+messages. Tool-enabled persisted history can contain arguments, outputs,
+failure details, and model responses derived from them. Applications handling
+secrets therefore need an end-to-end storage, access, retention, and logging
+policy. The chat CLI's terminal sanitization prevents control-sequence and
+multiline output injection; it is not secret redaction.
+
+## Tool safety and side effects
+
+Prefer narrow tools with strict argument validation and classify each tool in
+application policy as **read-only**, **idempotent write**, or **non-idempotent
+write**. Examples include inventory lookup, file listing, or volume reading;
+setting volume or a configuration value to a specific value; and sending email,
+deleting a file, purchasing an item, or incrementing a counter, respectively.
+When no classification is recorded, treat the effect as unspecified. The SDK
+does not yet add side-effect metadata or enforce execution policy.
+
+Require explicit application-level confirmation for destructive or high-impact
+non-idempotent operations. Prefer small Windows tools such as
+`get_system_volume`, `set_system_volume`, `mute_system_audio`,
+`open_allowed_application`, and `pause_media`. Avoid general
+`run_shell_command`, `execute_powershell`, or `run_arbitrary_program` tools
+unless strict allowlists, argument validation, user confirmation, audit logging,
+and least privilege protect them. AgentForge does not provide these tools.
+
+## Tool execution retries
+
+AgentForge does not automatically retry tool handlers. Provider transport
+retries and handler retries are different: retrying an LLM request before a
+tool call is observed may be safe under a provider-specific policy, while
+retrying a handler can repeat side effects. Never automatically retry
+non-idempotent tools. Any future retry of an idempotent write must be explicit,
+and external write handlers should use idempotency keys when available.
+
+When the configured maximum tool round limit is reached, no additional calls
+are executed and the last round is not retried. The existing typed conversation
+error is surfaced. Already completed side effects remain visible in records and
+history and generally cannot be rolled back.
 
 The framework validates arguments from each definition's JSON Schema before
 calling its handler. Schema validation does not inject defaults, so
@@ -830,6 +902,21 @@ const engine = agent.createConversationEngine({
 
 Advertising tool support means the adapter understands Ollama's tool
 wire semantics; it does not imply that every installed model supports tools.
+
+## Ollama model compatibility
+
+`OllamaLLMProvider.capabilities.tools === true` describes the adapter's support
+for Ollama tool wire contracts, not a guarantee about the selected model. Tool
+compatibility depends on the installed model and Ollama version, and an
+incompatible model may reject an otherwise valid tool request. Text-only mode
+remains available. The CLI surfaces the provider error instead of silently
+disabling tools, and AgentForge intentionally has no model allowlist or dynamic
+capability probe.
+
+A manual smoke test is the practical compatibility check: enable example tools,
+ask the model to calculate a deterministic expression, confirm that tool start
+and completion lines appear, and confirm that the model produces a final answer.
+This is separate from the standard provider health check.
 
 Configure a model-aware health check when readiness requires a specific local
 model:

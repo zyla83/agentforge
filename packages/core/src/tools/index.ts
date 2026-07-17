@@ -13,6 +13,8 @@ export type {
   ToolExecutionEventContext,
   ToolExecutionObserver,
   ToolExecutionObserverEvent,
+  ToolExecutionRedactionContext,
+  ToolExecutionRedactor,
   ToolExecutionStartedEvent,
 } from "./ToolExecutionObservability.js";
 export {

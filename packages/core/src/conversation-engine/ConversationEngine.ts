@@ -42,6 +42,7 @@ import type {
   ToolExecutionClock,
   ToolExecutionObserver,
   ToolExecutionRecord,
+  ToolExecutionRedactor,
 } from "../tools/index.js";
 import { ToolExecutionObserverDispatcher } from "../tools/internal/ToolExecutionObserverDispatcher.js";
 import { defaultToolExecutionClock } from "../tools/internal/defaultToolExecutionClock.js";
@@ -81,6 +82,7 @@ interface ResolvedEngineOptions {
   readonly toolMetadata: Readonly<Record<string, JsonValue>>;
   readonly toolObservers: readonly ToolExecutionObserver[];
   readonly toolClock: ToolExecutionClock;
+  readonly toolRedactor?: Readonly<ToolExecutionRedactor>;
 }
 
 interface ResolvedConversationTurn {
@@ -103,6 +105,7 @@ export class ConversationEngine {
   private readonly toolMetadata: Readonly<Record<string, JsonValue>>;
   private readonly toolObserverDispatcher: ToolExecutionObserverDispatcher;
   private readonly toolClock: ToolExecutionClock;
+  private readonly toolRedactor: Readonly<ToolExecutionRedactor> | undefined;
   private nextTurnSequence = 1;
 
   constructor(options: ConversationEngineOptions) {
@@ -119,6 +122,7 @@ export class ConversationEngine {
       resolved.toolObservers,
     );
     this.toolClock = resolved.toolClock;
+    this.toolRedactor = resolved.toolRedactor;
   }
 
   async runTurn(
@@ -138,6 +142,9 @@ export class ConversationEngine {
           : new ToolExecutorImpl(this.tools as ToolRegistry, {
               observerDispatcher: this.toolObserverDispatcher,
               clock: this.toolClock,
+              ...(this.toolRedactor === undefined
+                ? {}
+                : { redactor: this.toolRedactor }),
             });
 
       for (let round = 1; round <= this.maxToolRounds; round += 1) {
@@ -274,6 +281,9 @@ export class ConversationEngine {
           : new ToolExecutorImpl(this.tools as ToolRegistry, {
               observerDispatcher: this.toolObserverDispatcher,
               clock: this.toolClock,
+              ...(this.toolRedactor === undefined
+                ? {}
+                : { redactor: this.toolRedactor }),
             });
       yield Object.freeze({
         type: "started",
@@ -670,7 +680,7 @@ function validateEngineOptions(
 
 function snapshotObservability(
   value: unknown,
-): Pick<ResolvedEngineOptions, "toolObservers" | "toolClock"> {
+): Pick<ResolvedEngineOptions, "toolObservers" | "toolClock" | "toolRedactor"> {
   if (value !== undefined && !isRecord(value)) {
     throw engineOptionsError("observability must be an object");
   }
@@ -706,9 +716,52 @@ function snapshotObservability(
           monotonicNow: () =>
             (clockValue.monotonicNow as () => number).call(clockValue),
         });
+  const redactorValue = options.redactor;
+  if (
+    redactorValue !== undefined &&
+    (!isRecord(redactorValue) ||
+      (redactorValue.redactArguments !== undefined &&
+        typeof redactorValue.redactArguments !== "function") ||
+      (redactorValue.redactResult !== undefined &&
+        typeof redactorValue.redactResult !== "function"))
+  ) {
+    throw engineOptionsError(
+      "observability.redactor must expose optional callable redactArguments and redactResult methods",
+    );
+  }
+  const redactArguments = redactorValue?.redactArguments as
+    | ToolExecutionRedactor["redactArguments"]
+    | undefined;
+  const redactResult = redactorValue?.redactResult as
+    | ToolExecutionRedactor["redactResult"]
+    | undefined;
+  const redactor =
+    redactorValue === undefined
+      ? undefined
+      : Object.freeze({
+          ...(redactArguments !== undefined
+            ? {
+                redactArguments: (
+                  ...args: Parameters<
+                    NonNullable<ToolExecutionRedactor["redactArguments"]>
+                  >
+                ) => redactArguments.apply(redactorValue, args),
+              }
+            : {}),
+          ...(redactResult !== undefined
+            ? {
+                redactResult: (
+                  ...args: Parameters<
+                    NonNullable<ToolExecutionRedactor["redactResult"]>
+                  >
+                ) => redactResult.apply(redactorValue, args),
+              }
+            : {}),
+        });
   return {
     toolObservers: Object.freeze(candidates as ToolExecutionObserver[]),
     toolClock: clock,
+    ...(redactor === undefined ? {} : { toolRedactor: redactor }),
   };
 }
 

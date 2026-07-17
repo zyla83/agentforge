@@ -6,6 +6,7 @@ import {
   LLMFinishReason,
   LLMMessageRole,
   ProviderRequestError,
+  ProviderResponseError,
   createLLMTokenUsage,
   createToolCall,
 } from "@agentforge/provider-sdk";
@@ -29,7 +30,7 @@ export function mapGenerationResponse(
   const usage = mapTokenUsage(response);
   if ("toolCalls" in response.message) {
     if (response.message.content.length > 0) {
-      throw new ProviderRequestError(
+      throw new ProviderResponseError(
         options.providerName,
         `Provider "${resolveProviderName(options.providerName)}" returned assistant text together with tool calls.`,
       );
@@ -69,15 +70,23 @@ function mapOllamaToolCalls(
   providerName: string,
 ): readonly Readonly<ToolCall>[] {
   validateGenerationSequence(generationSequence, providerName);
-  return Object.freeze(
-    calls.map((call, index) =>
-      createToolCall({
-        id: createOllamaToolCallId(generationSequence, index + 1),
-        name: call.function.name,
-        arguments: mapOllamaJsonObject(call.function.arguments),
-      }),
-    ),
-  );
+  try {
+    return Object.freeze(
+      calls.map((call, index) =>
+        createToolCall({
+          id: createOllamaToolCallId(generationSequence, index + 1),
+          name: call.function.name,
+          arguments: mapOllamaJsonObject(call.function.arguments),
+        }),
+      ),
+    );
+  } catch (error) {
+    throw new ProviderResponseError(
+      providerName,
+      `Provider "${resolveProviderName(providerName)}" returned invalid tool call data.`,
+      { cause: error },
+    );
+  }
 }
 
 function createOllamaToolCallId(

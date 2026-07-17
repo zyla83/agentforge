@@ -103,3 +103,9 @@
 - Engine-scoped turn, provider-round, execution-index, and tool-call correlation metadata
 - Monotonic tool execution duration measurement and enriched runtime execution records
 - Deterministic observer ordering with exception isolation and non-awaited return values
+- Optional observer-only tool argument and result redaction with immutable snapshots
+- Safe redactor failure isolation that preserves execution and persisted conversation data
+- Single-line ANSI-safe chat CLI previews with Unicode-aware bounded truncation
+- Provider response errors for invalid complete and streaming Ollama tool output
+- Documented tool side-effect categories, confirmation guidance, and no-retry policy
+- Clarified Ollama adapter versus model tool compatibility

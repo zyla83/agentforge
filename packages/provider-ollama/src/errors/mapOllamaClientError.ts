@@ -9,6 +9,7 @@ import {
 import {
   ProviderAbortError,
   ProviderRequestError,
+  ProviderResponseError,
   ProviderTimeoutError,
   ProviderUnavailableError,
 } from "@agentforge/provider-sdk";
@@ -46,7 +47,7 @@ export function mapOllamaClientError(
     );
   }
   if (error instanceof OllamaResponseError) {
-    return new ProviderRequestError(
+    return new ProviderResponseError(
       providerName,
       `Provider "${resolveProviderName(providerName)}" received an invalid response from Ollama.`,
       { cause: error },

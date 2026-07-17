@@ -1,4 +1,8 @@
-import type { ToolCall, ToolResult } from "@agentforge/provider-sdk";
+import type {
+  JsonObject,
+  ToolCall,
+  ToolResult,
+} from "@agentforge/provider-sdk";
 
 export interface ToolExecutionEventContext {
   readonly conversationId: string;
@@ -44,6 +48,28 @@ export interface ConversationEngineObservabilityOptions {
     | ToolExecutionObserver
     | readonly ToolExecutionObserver[];
   readonly clock?: ToolExecutionClock;
+  readonly redactor?: Readonly<ToolExecutionRedactor>;
+}
+
+export interface ToolExecutionRedactionContext {
+  readonly phase: "started" | "completed";
+  readonly conversationId: string;
+  readonly turnId: string;
+  readonly providerRound: number;
+  readonly executionIndex: number;
+  readonly toolCallId: string;
+  readonly toolName: string;
+}
+
+export interface ToolExecutionRedactor {
+  redactArguments?(
+    argumentsValue: Readonly<JsonObject>,
+    context: Readonly<ToolExecutionRedactionContext>,
+  ): Readonly<JsonObject>;
+  redactResult?(
+    result: Readonly<ToolResult>,
+    context: Readonly<ToolExecutionRedactionContext>,
+  ): Readonly<ToolResult>;
 }
 
 export interface ToolExecutionCorrelation {

@@ -19,6 +19,7 @@ import type {
 import {
   ProviderError,
   ProviderRequestError,
+  ProviderResponseError,
   degradedProvider,
   healthyProvider,
   throwIfProviderRequestAborted,
@@ -54,6 +55,7 @@ const DEFAULT_VERSION = "1.0.0";
 const DEFAULT_DESCRIPTION = "Local Ollama large language model provider.";
 type OllamaHealthDetailRecord = OllamaHealthDetails &
   Readonly<Record<string, unknown>>;
+type OllamaStreamContentMode = "empty" | "text" | "tools";
 
 interface CompatibleOllamaClient {
   getVersion(options?: OllamaRequestOptions): Promise<OllamaVersion>;
@@ -218,6 +220,7 @@ export class OllamaLLMProvider implements LLMStreamingProvider {
     let model: string | undefined;
     let content = "";
     const toolCalls: Readonly<OllamaToolCall>[] = [];
+    let contentMode: OllamaStreamContentMode = "empty";
     let completedResponse: Readonly<LLMGenerationResponse> | undefined;
 
     try {
@@ -255,20 +258,22 @@ export class OllamaLLMProvider implements LLMStreamingProvider {
               "returned assistant text together with tool calls",
             );
           }
-          if (content.length > 0) {
+          if (contentMode === "text") {
             throw streamResponseError(
               this.metadata.name,
-              "returned tool calls after assistant text",
+              "returned tool calls after assistant text had already started",
             );
           }
+          contentMode = "tools";
           toolCalls.push(...chunkToolCalls);
         } else if (delta !== undefined && delta.length > 0) {
-          if (toolCalls.length > 0) {
+          if (contentMode === "tools") {
             throw streamResponseError(
               this.metadata.name,
-              "returned assistant text after tool calls",
+              "returned assistant text after tool calls had already started",
             );
           }
+          contentMode = "text";
           content += delta;
           yield Object.freeze({
             type: "delta",
@@ -354,8 +359,8 @@ function isCompatibleClient(value: unknown): value is CompatibleOllamaClient {
 function streamResponseError(
   providerName: string,
   detail: string,
-): ProviderRequestError {
-  return new ProviderRequestError(
+): ProviderResponseError {
+  return new ProviderResponseError(
     providerName,
     `Provider "${resolveProviderName(providerName)}" ${detail}.`,
   );
