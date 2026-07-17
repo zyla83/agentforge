@@ -1,4 +1,5 @@
 import type {
+  OllamaChatMessage,
   OllamaChatOptions,
   OllamaChatRequest,
   OllamaRequestOptions,
@@ -20,7 +21,7 @@ export function mapGenerationRequest(
 ): MappedGenerationRequest {
   const mappedRequest: {
     model: string;
-    messages: { role: "system" | "user" | "assistant"; content: string }[];
+    messages: OllamaChatMessage[];
     options?: OllamaChatOptions;
   } = {
     model: request.model,
@@ -28,7 +29,10 @@ export function mapGenerationRequest(
       if (message.role === LLMMessageRole.Tool || "toolCalls" in message) {
         throw new TypeError("Ollama tool message mapping is not implemented.");
       }
-      return { role: message.role, content: message.content };
+      return { role: message.role, content: message.content } as
+        | Extract<OllamaChatMessage, { role: "system" }>
+        | Extract<OllamaChatMessage, { role: "user" }>
+        | Extract<OllamaChatMessage, { role: "assistant" }>;
     }),
   };
 

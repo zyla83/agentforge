@@ -250,7 +250,7 @@ Tools are disabled by default. A turn may use `tools: true`, `tools: false`, or
 an exact-name array to override the engine setting; selected definitions retain
 registry order. Cancellation aborts the entire turn, and the provider-round
 limit prevents infinite tool loops. Streaming emits ordered tool-call start and
-completion events. The Ollama provider remains tool-unsupported until Task-029,
+completion events. The Ollama provider remains tool-unsupported until Task-030,
 so current Ollama chat sessions continue using text generation only.
 Schema string limits use JavaScript `string.length` (UTF-16 code units); values
 are never coerced and schema defaults are never injected.
@@ -617,6 +617,41 @@ for await (const chunk of client.chatStream({
   if (chunk.message !== undefined) process.stdout.write(chunk.message.content);
 }
 ```
+
+The low-level client can also represent Ollama tool definitions and calls:
+
+```ts
+const toolResponse = await client.chat({
+  model: "llama-model",
+  messages: [
+    {
+      role: "user",
+      content: "What is the weather?",
+    },
+  ],
+  tools: [
+    {
+      type: "function",
+      function: {
+        name: "weather",
+        description: "Get weather.",
+        parameters: {
+          type: "object",
+          properties: {
+            city: {
+              type: "string",
+            },
+          },
+          required: ["city"],
+        },
+      },
+    },
+  ],
+});
+```
+
+This task adds Ollama wire support only. AgentForge's Ollama provider does not
+advertise or execute tools until Task-030.
 
 Both complete and incrementally parsed NDJSON chat responses are supported.
 Per-request cancellation uses `AbortSignal`, while connection, HTTP, response,

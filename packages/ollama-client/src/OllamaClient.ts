@@ -1,9 +1,14 @@
 import type {
+  OllamaAssistantMessage,
   OllamaChatMessage,
   OllamaChatOptions,
   OllamaChatRequest,
   OllamaChatResponse,
   OllamaChatStreamChunk,
+  OllamaJsonObject,
+  OllamaJsonValue,
+  OllamaTool,
+  OllamaToolCall,
 } from "./OllamaChat.js";
 import type {
   FetchImplementation,
@@ -25,7 +30,9 @@ import { parseNdjsonStream } from "./internal/parseNdjsonStream.js";
 
 const DEFAULT_BASE_URL = "http://localhost:11434";
 const DEFAULT_TIMEOUT_MS = 30_000;
-const CHAT_ROLES = new Set(["system", "user", "assistant"]);
+const CHAT_ROLES = new Set(["system", "user", "assistant", "tool"]);
+const MESSAGE_PROPERTIES = new Set(["role", "content", "toolCalls"]);
+const RESPONSE_MESSAGE_PROPERTIES = new Set(["role", "content", "tool_calls"]);
 
 export class OllamaClient {
   private readonly baseUrl: string;
@@ -91,7 +98,7 @@ export class OllamaClient {
     request: OllamaChatRequest,
     options?: OllamaRequestOptions,
   ): Promise<OllamaChatResponse> {
-    validateChatRequest(request);
+    const validatedRequest = validateChatRequest(request);
     const endpoint = "/api/chat";
     const value = await this.requestJson(
       endpoint,
@@ -101,7 +108,7 @@ export class OllamaClient {
           Accept: "application/json",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(createChatBody(request, false)),
+        body: JSON.stringify(createChatBody(validatedRequest, false)),
       },
       options,
     );
@@ -113,7 +120,7 @@ export class OllamaClient {
     request: OllamaChatRequest,
     options?: OllamaRequestOptions,
   ): AsyncIterable<OllamaChatStreamChunk> {
-    validateChatRequest(request);
+    const validatedRequest = validateChatRequest(request);
     const endpoint = "/api/chat";
     const requestOptions = validateRequestOptions(options);
     const timeoutMs = requestOptions.timeoutMs ?? this.defaultTimeoutMs;
@@ -136,7 +143,7 @@ export class OllamaClient {
           Accept: "application/x-ndjson",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(createChatBody(request, true)),
+        body: JSON.stringify(createChatBody(validatedRequest, true)),
         signal: combined.signal,
       });
 
@@ -358,7 +365,9 @@ function validateTimeout(value: unknown, path: string): number {
   return value;
 }
 
-function validateChatRequest(request: OllamaChatRequest): void {
+function validateChatRequest(
+  request: OllamaChatRequest,
+): Readonly<OllamaChatRequest> {
   if (!isRecord(request)) {
     throw new OllamaRequestError(["request: must be an object"]);
   }
@@ -368,30 +377,261 @@ function validateChatRequest(request: OllamaChatRequest): void {
     details.push("model: must be a non-empty string");
   }
 
+  const messages: Readonly<OllamaChatMessage>[] = [];
   if (!Array.isArray(request.messages) || request.messages.length === 0) {
     details.push("messages: must be a non-empty array");
+  } else if (hasSparseSlots(request.messages)) {
+    details.push("messages: must not be sparse");
   } else {
     request.messages.forEach((message, index) => {
-      if (!isRecord(message)) {
-        details.push(`messages[${index}]: must be an object`);
-        return;
-      }
-      if (typeof message.role !== "string" || !CHAT_ROLES.has(message.role)) {
-        details.push(`messages[${index}].role: unsupported role`);
-      }
-      if (!isNonEmptyString(message.content)) {
-        details.push(`messages[${index}].content: must be a non-empty string`);
-      }
+      const snapshot = snapshotRequestMessage(
+        message,
+        `messages[${index}]`,
+        details,
+      );
+      if (snapshot !== undefined) messages.push(snapshot);
     });
   }
 
+  let tools: readonly Readonly<OllamaTool>[] | undefined;
+  if (request.tools !== undefined) {
+    if (!Array.isArray(request.tools) || request.tools.length === 0) {
+      details.push("tools: must be a non-empty array");
+    } else if (hasSparseSlots(request.tools)) {
+      details.push("tools: must not be sparse");
+    } else {
+      const names = new Set<string>();
+      const snapshots: Readonly<OllamaTool>[] = [];
+      request.tools.forEach((tool, index) => {
+        const snapshot = snapshotTool(tool, `tools[${index}]`, details);
+        if (snapshot === undefined) return;
+        if (names.has(snapshot.function.name)) {
+          details.push(
+            `tools[${index}].function.name: duplicate tool name \"${snapshot.function.name}\"`,
+          );
+          return;
+        }
+        names.add(snapshot.function.name);
+        snapshots.push(snapshot);
+      });
+      tools = Object.freeze(snapshots);
+    }
+  }
+
+  let options: Readonly<OllamaChatOptions> | undefined;
   if (request.options !== undefined) {
     validateChatOptions(request.options, details);
+    if (isRecord(request.options)) {
+      const snapshot: {
+        temperature?: number;
+        top_p?: number;
+        num_predict?: number;
+        stop?: readonly string[];
+      } = {};
+      if (typeof request.options.temperature === "number") {
+        snapshot.temperature = request.options.temperature;
+      }
+      if (typeof request.options.top_p === "number") {
+        snapshot.top_p = request.options.top_p;
+      }
+      if (typeof request.options.num_predict === "number") {
+        snapshot.num_predict = request.options.num_predict;
+      }
+      if (Array.isArray(request.options.stop)) {
+        snapshot.stop = Object.freeze([...request.options.stop]) as string[];
+      }
+      options = Object.freeze(snapshot);
+    }
   }
 
   if (details.length > 0) {
     throw new OllamaRequestError(details);
   }
+
+  const result: {
+    model: string;
+    messages: readonly Readonly<OllamaChatMessage>[];
+    tools?: readonly Readonly<OllamaTool>[];
+    options?: Readonly<OllamaChatOptions>;
+  } = {
+    model: request.model as string,
+    messages: Object.freeze(messages),
+  };
+  if (tools !== undefined) result.tools = tools;
+  if (options !== undefined) result.options = options;
+  return Object.freeze(result);
+}
+
+function snapshotRequestMessage(
+  value: unknown,
+  path: string,
+  details: string[],
+): Readonly<OllamaChatMessage> | undefined {
+  if (!isRecord(value)) {
+    details.push(`${path}: must be an object`);
+    return undefined;
+  }
+  rejectUnknownProperties(value, MESSAGE_PROPERTIES, path, details);
+  if (typeof value.role !== "string" || !CHAT_ROLES.has(value.role)) {
+    details.push(`${path}.role: unsupported role`);
+    return undefined;
+  }
+
+  const hasToolCalls = Object.hasOwn(value, "toolCalls");
+  if (value.role !== "assistant" && hasToolCalls) {
+    details.push(`${path}.toolCalls: is only allowed for assistant messages`);
+  }
+  if (value.role === "assistant" && hasToolCalls) {
+    if (typeof value.content !== "string") {
+      details.push(`${path}.content: must be a string`);
+    }
+    const toolCalls = snapshotToolCalls(
+      value.toolCalls,
+      `${path}.toolCalls`,
+      details,
+    );
+    if (typeof value.content !== "string" || toolCalls === undefined) {
+      return undefined;
+    }
+    return Object.freeze({
+      role: "assistant",
+      content: value.content,
+      toolCalls,
+    });
+  }
+
+  if (!isNonEmptyString(value.content)) {
+    details.push(`${path}.content: must be a non-empty string`);
+    return undefined;
+  }
+  if (value.role === "system") {
+    return Object.freeze({ role: "system", content: value.content });
+  }
+  if (value.role === "user") {
+    return Object.freeze({ role: "user", content: value.content });
+  }
+  if (value.role === "tool") {
+    return Object.freeze({ role: "tool", content: value.content });
+  }
+  return Object.freeze({ role: "assistant", content: value.content });
+}
+
+function snapshotTool(
+  value: unknown,
+  path: string,
+  details: string[],
+): Readonly<OllamaTool> | undefined {
+  if (!isRecord(value)) {
+    details.push(`${path}: must be an object`);
+    return undefined;
+  }
+  rejectUnknownProperties(value, new Set(["type", "function"]), path, details);
+  if (value.type !== "function") {
+    details.push(`${path}.type: must be \"function\"`);
+  }
+  if (!isRecord(value.function)) {
+    details.push(`${path}.function: must be an object`);
+    return undefined;
+  }
+  rejectUnknownProperties(
+    value.function,
+    new Set(["name", "description", "parameters"]),
+    `${path}.function`,
+    details,
+  );
+  if (!isNonEmptyString(value.function.name)) {
+    details.push(`${path}.function.name: must be a non-empty string`);
+  }
+  if (
+    value.function.description !== undefined &&
+    typeof value.function.description !== "string"
+  ) {
+    details.push(`${path}.function.description: must be a string`);
+  }
+  const parameters = snapshotJsonObject(
+    value.function.parameters,
+    `${path}.function.parameters`,
+    details,
+  );
+  if (
+    value.type !== "function" ||
+    !isNonEmptyString(value.function.name) ||
+    (value.function.description !== undefined &&
+      typeof value.function.description !== "string") ||
+    parameters === undefined
+  ) {
+    return undefined;
+  }
+  const fn: {
+    name: string;
+    description?: string;
+    parameters: Readonly<OllamaJsonObject>;
+  } = { name: value.function.name, parameters };
+  if (typeof value.function.description === "string") {
+    fn.description = value.function.description;
+  }
+  return Object.freeze({ type: "function", function: Object.freeze(fn) });
+}
+
+function snapshotToolCalls(
+  value: unknown,
+  path: string,
+  details: string[],
+): readonly Readonly<OllamaToolCall>[] | undefined {
+  if (!Array.isArray(value)) {
+    details.push(`${path}: must be an array`);
+    return undefined;
+  }
+  if (value.length === 0) {
+    details.push(`${path}: must be a non-empty array`);
+    return undefined;
+  }
+  if (hasSparseSlots(value)) {
+    details.push(`${path}: must not be sparse`);
+    return undefined;
+  }
+  const calls: Readonly<OllamaToolCall>[] = [];
+  value.forEach((call, index) => {
+    const snapshot = snapshotToolCall(call, `${path}[${index}]`, details);
+    if (snapshot !== undefined) calls.push(snapshot);
+  });
+  return calls.length === value.length ? Object.freeze(calls) : undefined;
+}
+
+function snapshotToolCall(
+  value: unknown,
+  path: string,
+  details: string[],
+): Readonly<OllamaToolCall> | undefined {
+  if (!isRecord(value)) {
+    details.push(`${path}: must be an object`);
+    return undefined;
+  }
+  rejectUnknownProperties(value, new Set(["function"]), path, details);
+  if (!isRecord(value.function)) {
+    details.push(`${path}.function: must be an object`);
+    return undefined;
+  }
+  rejectUnknownProperties(
+    value.function,
+    new Set(["name", "arguments"]),
+    `${path}.function`,
+    details,
+  );
+  if (!isNonEmptyString(value.function.name)) {
+    details.push(`${path}.function.name: must be a non-empty string`);
+  }
+  const args = snapshotJsonObject(
+    value.function.arguments,
+    `${path}.function.arguments`,
+    details,
+  );
+  if (!isNonEmptyString(value.function.name) || args === undefined) {
+    return undefined;
+  }
+  return Object.freeze({
+    function: Object.freeze({ name: value.function.name, arguments: args }),
+  });
 }
 
 function validateChatOptions(value: unknown, details: string[]): void {
@@ -426,7 +666,8 @@ function validateChatOptions(value: unknown, details: string[]): void {
     if (
       !Array.isArray(value.stop) ||
       value.stop.length === 0 ||
-      value.stop.length > 16
+      value.stop.length > 16 ||
+      hasSparseSlots(value.stop)
     ) {
       details.push("options.stop: must contain between 1 and 16 values");
     } else {
@@ -445,9 +686,36 @@ function createChatBody(
 ): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: request.model,
-    messages: request.messages.map(({ role, content }) => ({ role, content })),
+    messages: request.messages.map((message) => {
+      const result: Record<string, unknown> = {
+        role: message.role,
+        content: message.content,
+      };
+      if ("toolCalls" in message) {
+        result.tool_calls = message.toolCalls.map((call) => ({
+          function: {
+            name: call.function.name,
+            arguments: copyJsonObject(call.function.arguments),
+          },
+        }));
+      }
+      return result;
+    }),
     stream,
   };
+
+  if (request.tools !== undefined) {
+    body.tools = request.tools.map((tool) => {
+      const fn: Record<string, unknown> = {
+        name: tool.function.name,
+        parameters: copyJsonObject(tool.function.parameters),
+      };
+      if (tool.function.description !== undefined) {
+        fn.description = tool.function.description;
+      }
+      return { type: "function", function: fn };
+    });
+  }
 
   if (request.options !== undefined) {
     const options: Record<string, unknown> = {};
@@ -594,19 +862,7 @@ function parseChatResponse(
   if (!isNonEmptyString(value.model)) {
     details.push("model: must be a non-empty string");
   }
-  if (!isRecord(value.message)) {
-    details.push("message: must be an object");
-  } else {
-    if (
-      typeof value.message.role !== "string" ||
-      !CHAT_ROLES.has(value.message.role)
-    ) {
-      details.push("message.role: unsupported role");
-    }
-    if (typeof value.message.content !== "string") {
-      details.push("message.content: must be a string");
-    }
-  }
+  const message = parseAssistantMessage(value.message, "message", details);
   if (typeof value.done !== "boolean") {
     details.push("done: must be a boolean");
   }
@@ -617,20 +873,16 @@ function parseChatResponse(
     throw new OllamaResponseError(endpoint, details);
   }
 
-  const message = value.message as Record<string, unknown>;
   const result: {
     model: string;
-    message: Readonly<OllamaChatMessage>;
+    message: Readonly<OllamaAssistantMessage>;
     done: boolean;
     doneReason?: string;
     promptEvalCount?: number;
     evalCount?: number;
   } = {
     model: value.model as string,
-    message: Object.freeze({
-      role: message.role as OllamaChatMessage["role"],
-      content: message.content as string,
-    }),
+    message: message as Readonly<OllamaAssistantMessage>,
     done: value.done as boolean,
   };
   if (typeof value.done_reason === "string")
@@ -655,23 +907,16 @@ function parseChatStreamChunk(
 
   const path = `stream[${index}]`;
   const details: string[] = [];
+  let parsedMessage: Readonly<OllamaAssistantMessage> | undefined;
   if (value.model !== undefined && !isNonEmptyString(value.model)) {
     details.push(`${path}.model: must be a non-empty string`);
   }
   if (value.message !== undefined) {
-    if (!isRecord(value.message)) {
-      details.push(`${path}.message: must be an object`);
-    } else {
-      if (
-        typeof value.message.role !== "string" ||
-        !CHAT_ROLES.has(value.message.role)
-      ) {
-        details.push(`${path}.message.role: unsupported role`);
-      }
-      if (typeof value.message.content !== "string") {
-        details.push(`${path}.message.content: must be a string`);
-      }
-    }
+    parsedMessage = parseAssistantMessage(
+      value.message,
+      `${path}.message`,
+      details,
+    );
   }
   if (typeof value.done !== "boolean") {
     details.push(`${path}.done: must be a boolean`);
@@ -687,19 +932,14 @@ function parseChatStreamChunk(
 
   const chunk: {
     model?: string;
-    message?: Readonly<OllamaChatMessage>;
+    message?: Readonly<OllamaAssistantMessage>;
     done: boolean;
     doneReason?: string;
     promptEvalCount?: number;
     evalCount?: number;
   } = { done: value.done as boolean };
   if (typeof value.model === "string") chunk.model = value.model;
-  if (isRecord(value.message)) {
-    chunk.message = Object.freeze({
-      role: value.message.role as OllamaChatMessage["role"],
-      content: value.message.content as string,
-    });
-  }
+  if (parsedMessage !== undefined) chunk.message = parsedMessage;
   if (typeof value.done_reason === "string") {
     chunk.doneReason = value.done_reason;
   }
@@ -708,6 +948,48 @@ function parseChatStreamChunk(
   }
   if (typeof value.eval_count === "number") chunk.evalCount = value.eval_count;
   return Object.freeze(chunk);
+}
+
+function parseAssistantMessage(
+  value: unknown,
+  path: string,
+  details: string[],
+): Readonly<OllamaAssistantMessage> | undefined {
+  if (!isRecord(value)) {
+    details.push(`${path}: must be an object`);
+    return undefined;
+  }
+  rejectUnknownProperties(value, RESPONSE_MESSAGE_PROPERTIES, path, details);
+  if (value.role !== "assistant") {
+    details.push(`${path}.role: must be \"assistant\"`);
+  }
+  if (typeof value.content !== "string") {
+    details.push(`${path}.content: must be a string`);
+  }
+
+  let toolCalls: readonly Readonly<OllamaToolCall>[] | undefined;
+  if (value.tool_calls !== undefined) {
+    toolCalls = snapshotToolCalls(
+      value.tool_calls,
+      `${path}.tool_calls`,
+      details,
+    );
+  }
+  if (
+    value.role !== "assistant" ||
+    typeof value.content !== "string" ||
+    (value.tool_calls !== undefined && toolCalls === undefined)
+  ) {
+    return undefined;
+  }
+  if (toolCalls !== undefined) {
+    return Object.freeze({
+      role: "assistant",
+      content: value.content,
+      toolCalls,
+    });
+  }
+  return Object.freeze({ role: "assistant", content: value.content });
 }
 
 async function readHttpErrorMessage(
@@ -744,6 +1026,140 @@ function validateOptionalCount(
   ) {
     details.push(`${path}: must be a non-negative finite integer`);
   }
+}
+
+function snapshotJsonObject(
+  value: unknown,
+  path: string,
+  details: string[],
+): Readonly<OllamaJsonObject> | undefined {
+  if (!isPlainRecord(value)) {
+    details.push(`${path}: must be a JSON object`);
+    return undefined;
+  }
+  return snapshotJsonRecord(value, path, details, new WeakSet());
+}
+
+function snapshotJsonRecord(
+  value: Record<string, unknown>,
+  path: string,
+  details: string[],
+  active: WeakSet<object>,
+): Readonly<OllamaJsonObject> | undefined {
+  if (active.has(value)) {
+    details.push(`${path}: must not contain cyclic values`);
+    return undefined;
+  }
+  if (Object.getOwnPropertySymbols(value).length > 0) {
+    details.push(`${path}: must contain only string keys`);
+    return undefined;
+  }
+  active.add(value);
+  const result: Record<string, OllamaJsonValue> = {};
+  let valid = true;
+  for (const [key, child] of Object.entries(value)) {
+    const snapshot = snapshotJsonValue(
+      child,
+      `${path}.${key}`,
+      details,
+      active,
+    );
+    if (snapshot === undefined && child !== null) {
+      valid = false;
+    } else {
+      result[key] = snapshot as OllamaJsonValue;
+    }
+  }
+  active.delete(value);
+  return valid ? Object.freeze(result) : undefined;
+}
+
+function snapshotJsonValue(
+  value: unknown,
+  path: string,
+  details: string[],
+  active: WeakSet<object>,
+): OllamaJsonValue | undefined {
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+  if (typeof value === "number") {
+    if (Number.isFinite(value)) return value;
+    details.push(`${path}: must be a finite number`);
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    if (active.has(value)) {
+      details.push(`${path}: must not contain cyclic values`);
+      return undefined;
+    }
+    if (hasSparseSlots(value)) {
+      details.push(`${path}: must not be sparse`);
+      return undefined;
+    }
+    active.add(value);
+    const result: OllamaJsonValue[] = [];
+    let valid = true;
+    value.forEach((child, index) => {
+      const snapshot = snapshotJsonValue(
+        child,
+        `${path}[${index}]`,
+        details,
+        active,
+      );
+      if (snapshot === undefined && child !== null) valid = false;
+      else result.push(snapshot as OllamaJsonValue);
+    });
+    active.delete(value);
+    return valid ? Object.freeze(result) : undefined;
+  }
+  if (isPlainRecord(value)) {
+    return snapshotJsonRecord(value, path, details, active);
+  }
+  details.push(`${path}: must be a JSON value`);
+  return undefined;
+}
+
+function copyJsonObject(
+  value: Readonly<OllamaJsonObject>,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [key, copyJsonValue(child)]),
+  );
+}
+
+function copyJsonValue(value: OllamaJsonValue): unknown {
+  if (Array.isArray(value)) return value.map((child) => copyJsonValue(child));
+  if (isPlainRecord(value)) return copyJsonObject(value);
+  return value;
+}
+
+function rejectUnknownProperties(
+  value: Record<string, unknown>,
+  allowed: ReadonlySet<string>,
+  path: string,
+  details: string[],
+): void {
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) details.push(`${path}.${key}: unknown property`);
+  }
+}
+
+function hasSparseSlots(value: readonly unknown[]): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    if (!(index in value)) return true;
+  }
+  return false;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) return false;
+  const prototype = Object.getPrototypeOf(value) as object | null;
+  return prototype === Object.prototype || prototype === null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

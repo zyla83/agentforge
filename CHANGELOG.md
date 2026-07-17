@@ -86,3 +86,5 @@
 - Opt-in bounded multi-round tool orchestration for complete and streaming conversation turns
 - Streaming tool-call lifecycle events with immutable execution records
 - V2 conversation and store-entry serialization with backward-compatible V1 decoding
+- Ollama tool definitions, tool-call messages, tool results, and JSON wire contracts
+- Tool-aware Ollama request serialization plus complete and streaming response parsing

@@ -91,7 +91,6 @@ describe("OllamaClient.chat validation", () => {
     { ...validRequest, model: "   " },
     { ...validRequest, messages: [] },
     { ...validRequest, messages: [null] },
-    { ...validRequest, messages: [{ role: "tool", content: "hello" }] },
     { ...validRequest, messages: [{ role: "user", content: " " }] },
     { ...validRequest, options: { temperature: -1 } },
     { ...validRequest, options: { temperature: 2.1 } },

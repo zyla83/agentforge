@@ -1,11 +1,24 @@
 export { OllamaClient } from "./OllamaClient.js";
 export type {
+  OllamaAssistantMessage,
+  OllamaAssistantTextMessage,
+  OllamaAssistantToolCallMessage,
   OllamaChatMessage,
   OllamaChatOptions,
   OllamaChatRequest,
   OllamaChatResponse,
   OllamaChatRole,
   OllamaChatStreamChunk,
+  OllamaJsonObject,
+  OllamaJsonPrimitive,
+  OllamaJsonValue,
+  OllamaSystemMessage,
+  OllamaTool,
+  OllamaToolCall,
+  OllamaToolCallFunction,
+  OllamaToolFunction,
+  OllamaToolResultMessage,
+  OllamaUserMessage,
 } from "./OllamaChat.js";
 export type {
   FetchImplementation,
