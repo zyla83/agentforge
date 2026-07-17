@@ -91,3 +91,6 @@
 - Ollama provider tool capability and provider-neutral definition/message mapping
 - Immutable Ollama tool-call response mapping with provider-instance call IDs
 - Conservative streaming tool-call aggregation with mixed-output rejection
+- `@agentforge/example-tools` with calculator, text-formatting, and inventory lookup examples
+- Explicit ordered example-tool registration helper with immutable associations
+- Deterministic non-network two-round conversation tool execution example

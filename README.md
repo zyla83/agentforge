@@ -70,6 +70,7 @@ generation cancels the active response without saving partial output.
 ## Workspace
 
 - `packages/core` - the AgentForge facade and framework lifecycle
+- `packages/example-tools` - deterministic reusable tool API examples
 - `packages/ollama-client` - low-level transport client for the Ollama REST API
 - `packages/plugin-sdk` - the public plugin contract
 - `packages/provider-mock` - deterministic in-memory LLM provider for tests and examples
@@ -80,6 +81,7 @@ generation cancels the active response without saving partial output.
 - `examples/basic-agent` - runnable plugin lifecycle example
 - `examples/chat-cli` - interactive multi-turn Ollama chat application
 - `examples/ollama-agent` - optional live Ollama health and generation example
+- `examples/tool-execution` - deterministic two-round tool execution example
 - `tests` - repository-level tests
 
 ## Current state
@@ -254,6 +256,50 @@ completion events. `OllamaLLMProvider` maps these contracts for tool-capable
 Ollama models, while engine and turn-level tool selection remains opt-in.
 Schema string limits use JavaScript `string.length` (UTF-16 code units); values
 are never coerced and schema defaults are never injected.
+
+## Example tools
+
+`@agentforge/example-tools` provides deterministic, side-effect-free examples
+for arithmetic, text formatting, and inventory lookup. They are educational
+tools rather than built-ins: importing the package does not register or enable
+anything, and definitions remain separate from executable handlers.
+
+```ts
+import { AgentForge } from "@agentforge/core";
+import { registerExampleTools } from "@agentforge/example-tools";
+
+const agent = new AgentForge();
+
+registerExampleTools(agent);
+await agent.start();
+
+const engine = agent.createConversationEngine({
+  toolExecution: {
+    enabled: true,
+  },
+});
+```
+
+Applications can also register only the tools they need:
+
+```ts
+import {
+  calculatorToolDefinition,
+  calculatorToolHandler,
+} from "@agentforge/example-tools";
+
+agent.registerTool(calculatorToolDefinition, calculatorToolHandler);
+```
+
+The framework validates arguments from each definition's JSON Schema before
+calling its handler. Schema validation does not inject defaults, so
+`format_text` applies its own separator and trimming defaults. Ordinary handler
+errors, such as division by zero or an unknown inventory SKU, are converted by
+`ToolExecutor` into structured failures. The handlers do not access the
+network, filesystem, environment, current time, or random state.
+
+Run the non-network two-round calculator example with `pnpm example:tools`.
+Interactive chat CLI tool integration is deferred to Task-032.
 
 ## Conversation model
 

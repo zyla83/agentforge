@@ -81,6 +81,22 @@ importers:
         specifier: 22.15.30
         version: 22.15.30
 
+  examples/tool-execution:
+    dependencies:
+      '@agentforge/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@agentforge/example-tools':
+        specifier: workspace:*
+        version: link:../../packages/example-tools
+      '@agentforge/provider-sdk':
+        specifier: workspace:*
+        version: link:../../packages/provider-sdk
+    devDependencies:
+      '@types/node':
+        specifier: 22.15.30
+        version: 22.15.30
+
   packages/config:
     dependencies:
       '@agentforge/shared':
@@ -107,6 +123,12 @@ importers:
       '@agentforge/shared':
         specifier: workspace:*
         version: link:../shared
+
+  packages/example-tools:
+    dependencies:
+      '@agentforge/provider-sdk':
+        specifier: workspace:*
+        version: link:../provider-sdk
 
   packages/logger:
     dependencies:

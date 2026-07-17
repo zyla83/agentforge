@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "./packages/config" },
+    { "path": "./packages/example-tools" },
     { "path": "./packages/logger" },
     { "path": "./packages/ollama-client" },
     { "path": "./packages/plugin-sdk" },
@@ -13,6 +14,7 @@
     { "path": "./packages/core" },
     { "path": "./examples/basic-agent" },
     { "path": "./examples/chat-cli" },
-    { "path": "./examples/ollama-agent" }
+    { "path": "./examples/ollama-agent" },
+    { "path": "./examples/tool-execution" }
   ]
 }
