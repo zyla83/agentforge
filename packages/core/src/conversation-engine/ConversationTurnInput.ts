@@ -13,4 +13,5 @@ export interface ConversationTurnInput {
   readonly generation?: LLMGenerationOptions;
   readonly request?: ProviderRequestOptions;
   readonly profile?: AgentProfile;
+  readonly tools?: false | true | readonly string[];
 }

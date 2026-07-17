@@ -6,6 +6,11 @@ export enum ConversationTurnExecutionPhase {
   UserAppend = "user-append",
   ProviderExecution = "provider-execution",
   AssistantAppend = "assistant-append",
+  ToolResolution = "tool-resolution",
+  ToolArgumentValidation = "tool-argument-validation",
+  ToolExecution = "tool-execution",
+  ToolResultAppend = "tool-result-append",
+  ToolLoop = "tool-loop",
   Completed = "completed",
 }
 

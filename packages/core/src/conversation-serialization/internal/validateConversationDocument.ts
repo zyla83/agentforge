@@ -1,25 +1,42 @@
 import {
+  LLMMessageRole,
+  createToolCall,
+  createToolResult,
+} from "@agentforge/provider-sdk";
+import {
   isNonEmptyString,
   isSupportedRole,
   parseIsoTimestamp,
 } from "../../conversation/internal/validation.js";
-import type { ConversationDocumentV1 } from "../ConversationDocument.js";
+import type {
+  ConversationDocument,
+  SerializedConversationV1,
+  SerializedConversationV2,
+} from "../ConversationDocument.js";
 import {
   InvalidConversationDocumentError,
   UnsupportedConversationDocumentVersionError,
 } from "../errors/index.js";
 import {
   CONVERSATION_DOCUMENT_KIND,
-  CONVERSATION_DOCUMENT_VERSION,
+  CONVERSATION_DOCUMENT_VERSION_1,
+  CONVERSATION_DOCUMENT_VERSION_2,
 } from "./constants.js";
 
 const ENVELOPE_KEYS = new Set(["kind", "version", "conversation"]);
 const CONVERSATION_KEYS = new Set(["id", "createdAt", "updatedAt", "messages"]);
-const MESSAGE_KEYS = new Set(["id", "role", "content", "createdAt"]);
+const TEXT_MESSAGE_KEYS = new Set(["id", "role", "content", "createdAt"]);
+const TOOL_CALL_MESSAGE_KEYS = new Set([...TEXT_MESSAGE_KEYS, "toolCalls"]);
+const TOOL_RESULT_MESSAGE_KEYS = new Set([
+  ...TEXT_MESSAGE_KEYS,
+  "toolCallId",
+  "toolName",
+  "result",
+]);
 
 export function validateConversationDocument(
   value: unknown,
-): ConversationDocumentV1 {
+): ConversationDocument {
   try {
     if (!isPlainObject(value)) {
       throw new InvalidConversationDocumentError([
@@ -34,23 +51,29 @@ export function validateConversationDocument(
     if (
       details.length === 0 &&
       version !== undefined &&
-      version !== CONVERSATION_DOCUMENT_VERSION
+      version !== CONVERSATION_DOCUMENT_VERSION_1 &&
+      version !== CONVERSATION_DOCUMENT_VERSION_2
     ) {
       throw new UnsupportedConversationDocumentVersionError(
         CONVERSATION_DOCUMENT_KIND,
         version,
-        [CONVERSATION_DOCUMENT_VERSION],
+        [CONVERSATION_DOCUMENT_VERSION_1, CONVERSATION_DOCUMENT_VERSION_2],
       );
     }
 
     if (!hasOwn(value, "conversation")) {
       details.push("conversation is required");
     } else {
-      validateConversationValue(value.conversation, "conversation", details);
+      validateConversationValue(
+        value.conversation,
+        "conversation",
+        details,
+        version ?? CONVERSATION_DOCUMENT_VERSION_2,
+      );
     }
 
     if (details.length > 0) throw new InvalidConversationDocumentError(details);
-    return value as unknown as ConversationDocumentV1;
+    return value as unknown as ConversationDocument;
   } catch (error) {
     if (
       error instanceof InvalidConversationDocumentError ||
@@ -69,7 +92,8 @@ export function validateConversationValue(
   value: unknown,
   path: string,
   details: string[],
-): value is ConversationDocumentV1["conversation"] {
+  version: number = CONVERSATION_DOCUMENT_VERSION_2,
+): value is SerializedConversationV1 | SerializedConversationV2 {
   if (!isPlainObject(value)) {
     details.push(`${path} must be a plain object`);
     return false;
@@ -86,7 +110,7 @@ export function validateConversationValue(
     details.push(`${path}.messages must be an array`);
   } else {
     for (const [index, message] of value.messages.entries()) {
-      validateMessage(message, `${path}.messages[${index}]`, details);
+      validateMessage(message, `${path}.messages[${index}]`, details, version);
     }
   }
   return true;
@@ -125,20 +149,83 @@ function validateMessage(
   value: unknown,
   path: string,
   details: string[],
+  version: number,
 ): void {
   if (!isPlainObject(value)) {
     details.push(`${path} must be a plain object`);
     return;
   }
-  collectUnknownProperties(value, MESSAGE_KEYS, path, details);
+  const hasToolCalls = Object.hasOwn(value, "toolCalls");
+  const isToolResult = value.role === LLMMessageRole.Tool;
+  collectUnknownProperties(
+    value,
+    hasToolCalls
+      ? TOOL_CALL_MESSAGE_KEYS
+      : isToolResult
+        ? TOOL_RESULT_MESSAGE_KEYS
+        : TEXT_MESSAGE_KEYS,
+    path,
+    details,
+  );
   validateNonEmptyString(value, "id", path, details);
   if (!hasOwn(value, "role")) {
     details.push(`${path}.role is required`);
-  } else if (!isSupportedRole(value.role)) {
+  } else if (
+    !isSupportedRole(value.role) ||
+    (version === CONVERSATION_DOCUMENT_VERSION_1 &&
+      value.role === LLMMessageRole.Tool)
+  ) {
     details.push(`${path}.role must be a valid LLMMessageRole`);
   }
-  validateNonEmptyString(value, "content", path, details);
+  if (hasToolCalls) {
+    if (version === CONVERSATION_DOCUMENT_VERSION_1)
+      details.push(`${path}.toolCalls is not supported in version 1`);
+    if (value.role !== LLMMessageRole.Assistant)
+      details.push(`${path}.role must be assistant when toolCalls are present`);
+    validateString(value, "content", path, details);
+    validateToolCalls(value.toolCalls, `${path}.toolCalls`, details);
+  } else {
+    validateNonEmptyString(value, "content", path, details);
+  }
+  if (isToolResult) {
+    if (version === CONVERSATION_DOCUMENT_VERSION_1)
+      details.push(`${path} tool results are not supported in version 1`);
+    validateNonEmptyString(value, "toolCallId", path, details);
+    validateNonEmptyString(value, "toolName", path, details);
+    try {
+      const result = createToolResult(value.result as never);
+      if (
+        result.toolCallId !== value.toolCallId ||
+        result.toolName !== value.toolName
+      )
+        details.push(`${path}.result must match toolCallId and toolName`);
+    } catch {
+      details.push(`${path}.result must be a valid tool result`);
+    }
+  }
   validateTimestamp(value, "createdAt", path, details);
+}
+
+function validateToolCalls(
+  value: unknown,
+  path: string,
+  details: string[],
+): void {
+  if (!Array.isArray(value) || value.length === 0) {
+    details.push(`${path} must contain at least one tool call`);
+    return;
+  }
+  const ids = new Set<string>();
+  value.forEach((call, index) => {
+    try {
+      const snapshot = createToolCall(call as never);
+      if (ids.has(snapshot.id))
+        details.push(`${path}[${index}].id must be unique`);
+      ids.add(snapshot.id);
+    } catch {
+      details.push(`${path}[${index}] must be a valid tool call`);
+    }
+  });
 }
 
 function validateKind(value: Record<string, unknown>, details: string[]): void {
@@ -180,6 +267,17 @@ function validateNonEmptyString(
   } else if (!isNonEmptyString(value[key])) {
     details.push(`${path}.${key} must be a non-empty string`);
   }
+}
+
+function validateString(
+  value: Record<string, unknown>,
+  key: string,
+  path: string,
+  details: string[],
+): void {
+  if (!hasOwn(value, key)) details.push(`${path}.${key} is required`);
+  else if (typeof value[key] !== "string")
+    details.push(`${path}.${key} must be a string`);
 }
 
 function validateTimestamp(

@@ -4,4 +4,5 @@ export enum LLMFinishReason {
   Aborted = "aborted",
   Error = "error",
   Unknown = "unknown",
+  ToolCalls = "tool_calls",
 }

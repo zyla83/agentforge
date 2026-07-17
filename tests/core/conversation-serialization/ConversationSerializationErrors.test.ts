@@ -336,7 +336,7 @@ describe("unsupported conversation document versions", () => {
   it.each([
     [
       CONVERSATION_DOCUMENT_KIND,
-      2,
+      3,
       decodeConversationDocument,
       validConversationDocument,
     ],
@@ -348,7 +348,7 @@ describe("unsupported conversation document versions", () => {
     ],
     [
       CONVERSATION_STORE_ENTRY_DOCUMENT_KIND,
-      2,
+      3,
       decodeConversationStoreEntryDocument,
       validStoreDocument,
     ],
@@ -364,7 +364,7 @@ describe("unsupported conversation document versions", () => {
       expect(error).toMatchObject({
         documentKind: kind,
         version,
-        supportedVersions: [1],
+        supportedVersions: [1, 2],
       });
       expect(
         Object.isFrozen(

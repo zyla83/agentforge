@@ -8,6 +8,7 @@ import type {
   LLMGenerationRequest,
   ProviderRequestOptions,
 } from "@agentforge/provider-sdk";
+import { LLMMessageRole } from "@agentforge/provider-sdk";
 
 export interface MappedGenerationRequest {
   readonly request: OllamaChatRequest;
@@ -23,7 +24,12 @@ export function mapGenerationRequest(
     options?: OllamaChatOptions;
   } = {
     model: request.model,
-    messages: request.messages.map(({ role, content }) => ({ role, content })),
+    messages: request.messages.map((message) => {
+      if (message.role === LLMMessageRole.Tool || "toolCalls" in message) {
+        throw new TypeError("Ollama tool message mapping is not implemented.");
+      }
+      return { role: message.role, content: message.content };
+    }),
   };
 
   if (request.generation !== undefined) {

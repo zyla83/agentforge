@@ -8,7 +8,14 @@ export type {
   ConversationMessageInput,
   CreateConversationInput,
 } from "./ConversationInput.js";
-export type { ConversationMessage } from "./ConversationMessage.js";
+export type {
+  ConversationAssistantMessage,
+  ConversationAssistantToolCallMessage,
+  ConversationMessage,
+  ConversationSystemMessage,
+  ConversationToolResultMessage,
+  ConversationUserMessage,
+} from "./ConversationMessage.js";
 export type { ConversationSnapshot } from "./ConversationSnapshot.js";
 export { appendConversationMessage } from "./appendConversationMessage.js";
 export { conversationToLLMMessages } from "./conversationToLLMMessages.js";

@@ -2,7 +2,10 @@ import { readFile, readdir } from "node:fs/promises";
 import {
   CONVERSATION_STORE_ENTRY_DOCUMENT_KIND,
   CONVERSATION_STORE_ENTRY_DOCUMENT_VERSION,
+  appendConversationMessage,
+  createConversation,
 } from "@agentforge/core";
+import { LLMMessageRole, successfulToolResult } from "@agentforge/provider-sdk";
 import { createFilesystemConversationStore } from "@agentforge/storage-filesystem";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { filesystemOperations } from "../../packages/storage-filesystem/src/internal/createAtomicFileWriter.js";
@@ -28,7 +31,7 @@ afterEach(async () => {
 });
 
 describe("FilesystemConversationStore persistence", () => {
-  it("writes one encoded V1 JSON file with pretty output by default", async () => {
+  it("writes one encoded V2 JSON file with pretty output by default", async () => {
     const root = await temporaryRoot();
     const id = "../unsafe\\id: with spaces 🧪";
     const store = createFilesystemConversationStore({ directory: root });
@@ -52,6 +55,38 @@ describe("FilesystemConversationStore persistence", () => {
       },
     });
     expect(saved.revision).toBe(1);
+  });
+
+  it("persists and restores a V2 tool conversation", async () => {
+    const root = await temporaryRoot();
+    const store = createFilesystemConversationStore({ directory: root });
+    const call = { id: "call-1", name: "weather", arguments: { city: "Łódź" } };
+    const result = successfulToolResult(call, { temperature: 20 });
+    let value = createConversation({
+      id: "tools",
+      createdAt: "2026-07-17T10:00:00.000Z",
+    });
+    value = appendConversationMessage(value, {
+      id: "message-1",
+      role: LLMMessageRole.Assistant,
+      content: "",
+      createdAt: "2026-07-17T10:00:01.000Z",
+      toolCalls: [call],
+    });
+    value = appendConversationMessage(value, {
+      id: "message-2",
+      role: LLMMessageRole.Tool,
+      content: JSON.stringify(result),
+      createdAt: "2026-07-17T10:00:02.000Z",
+      toolCallId: call.id,
+      toolName: call.name,
+      result,
+    });
+
+    await store.save(value);
+    const restored = await store.require("tools");
+    expect(restored.conversation).toEqual(value);
+    expect(Object.isFrozen(restored.conversation.messages[1])).toBe(true);
   });
 
   it("writes compact JSON when pretty is false", async () => {

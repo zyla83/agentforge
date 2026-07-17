@@ -32,6 +32,7 @@ import { AgentForgeState } from "./AgentForgeState.js";
 import type { AgentProfile } from "./agent-profile/index.js";
 import {
   type ConversationEngine,
+  type ConversationEngineOptions,
   createConversationEngine as createConversationEngineFactory,
 } from "./conversation-engine/index.js";
 import type { ConversationFactoryOptions } from "./conversation/index.js";
@@ -272,14 +273,19 @@ export class AgentForge {
     readonly conversationFactory?: ConversationFactoryOptions;
     readonly profile?: AgentProfile;
     readonly signal?: AbortSignal;
+    readonly toolExecution?: ConversationEngineOptions["toolExecution"];
   }): ConversationEngine {
     return createConversationEngineFactory({
       providers: this,
+      tools: this.toolRegistryView,
       ...(options?.conversationFactory === undefined
         ? {}
         : { conversationFactory: options.conversationFactory }),
       ...(options?.profile === undefined ? {} : { profile: options.profile }),
       ...(options?.signal === undefined ? {} : { signal: options.signal }),
+      ...(options?.toolExecution === undefined
+        ? {}
+        : { toolExecution: options.toolExecution }),
     });
   }
 

@@ -34,6 +34,24 @@ export function validateConversationTurnInput(
   if (value.provider !== undefined && !isNonEmptyString(value.provider)) {
     details.push("provider: must be a non-empty string when provided");
   }
+  if (
+    value.tools !== undefined &&
+    typeof value.tools !== "boolean" &&
+    !Array.isArray(value.tools)
+  ) {
+    details.push("tools: must be a boolean or an array of tool names");
+  } else if (Array.isArray(value.tools)) {
+    if (value.tools.length === 0)
+      details.push("tools: must contain at least one tool name");
+    const names = new Set<string>();
+    value.tools.forEach((name, index) => {
+      if (!isNonEmptyString(name))
+        details.push(`tools[${index}]: must be a non-empty string`);
+      else if (names.has(name))
+        details.push(`tools[${index}]: duplicate tool name "${name}"`);
+      else names.add(name);
+    });
+  }
 
   const providerValidation = validateProviderOptions(
     isNonEmptyString(value.model) ? value.model : "validation-model",

@@ -10,7 +10,11 @@ import { describe, expect, it } from "vitest";
 const initialTimestamp = "2026-07-15T12:00:00.000Z";
 
 describe("appendConversationMessage", () => {
-  it.each(Object.values(LLMMessageRole))("appends a %s message", (role) => {
+  it.each(
+    Object.values(LLMMessageRole).filter(
+      (role) => role !== LLMMessageRole.Tool,
+    ),
+  )("appends a %s text message", (role) => {
     const initial = createConversation({
       id: "conversation",
       createdAt: initialTimestamp,
@@ -23,6 +27,39 @@ describe("appendConversationMessage", () => {
     });
 
     expect(result.messages.at(-1)).toMatchObject({ role, content: "Content" });
+  });
+
+  it("appends a tool result after its assistant tool call", () => {
+    const call = { id: "call-1", name: "example", arguments: {} };
+    const toolCallConversation = appendConversationMessage(
+      createConversation({ id: "conversation", createdAt: initialTimestamp }),
+      {
+        id: "assistant-call",
+        role: LLMMessageRole.Assistant,
+        content: "",
+        createdAt: "2026-07-15T12:01:00.000Z",
+        toolCalls: [call],
+      },
+    );
+    const result = {
+      toolCallId: call.id,
+      toolName: call.name,
+      status: "success" as const,
+      output: null,
+    };
+    const conversation = appendConversationMessage(toolCallConversation, {
+      id: "tool-result",
+      role: LLMMessageRole.Tool,
+      content: JSON.stringify(result),
+      createdAt: "2026-07-15T12:02:00.000Z",
+      toolCallId: call.id,
+      toolName: call.name,
+      result,
+    });
+    expect(conversation.messages.at(-1)).toMatchObject({
+      role: LLMMessageRole.Tool,
+      result,
+    });
   });
 
   it("creates a new immutable snapshot without changing the original", () => {

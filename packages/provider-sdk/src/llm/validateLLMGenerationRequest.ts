@@ -1,6 +1,11 @@
 import type { ProviderRequestOptions } from "../ProviderRequestOptions.js";
 import { validateProviderRequestOptions } from "../ProviderRequestOptions.js";
 import { ProviderRequestError } from "../errors/index.js";
+import {
+  createToolCall,
+  createToolDefinition,
+  createToolResult,
+} from "../tools/index.js";
 import type { LLMGenerationRequest } from "./LLMGenerationRequest.js";
 import { LLMMessageRole } from "./LLMMessage.js";
 import { InvalidLLMRequestError } from "./errors/index.js";
@@ -22,6 +27,7 @@ export function validateLLMGenerationRequest(
 
   validateModel(requestValue.model, details);
   validateMessages(requestValue.messages, details);
+  validateTools(requestValue.tools, details);
   validateGenerationOptions(requestValue.generation, details);
 
   const requestOptions = requestValue.request;
@@ -88,12 +94,90 @@ function validateMessages(value: unknown, details: string[]): void {
     ) {
       details.push(`messages[${index}].role: unsupported role`);
     }
-
-    if (
+    if (message.role === LLMMessageRole.Assistant && "toolCalls" in message) {
+      validateAssistantToolCallMessage(message, index, details);
+    } else if (message.role === LLMMessageRole.Tool) {
+      validateToolResultMessage(message, index, details);
+    } else if (
       typeof message.content !== "string" ||
       message.content.trim().length === 0
     ) {
       details.push(`messages[${index}].content: must be a non-empty string`);
+    }
+  }
+}
+
+function validateAssistantToolCallMessage(
+  message: Record<string, unknown>,
+  index: number,
+  details: string[],
+): void {
+  if (typeof message.content !== "string") {
+    details.push(`messages[${index}].content: must be a string`);
+  }
+  if (!Array.isArray(message.toolCalls) || message.toolCalls.length === 0) {
+    details.push(
+      `messages[${index}].toolCalls: must contain at least one tool call`,
+    );
+    return;
+  }
+  for (const [callIndex, call] of message.toolCalls.entries()) {
+    try {
+      createToolCall(call as never);
+    } catch {
+      details.push(
+        `messages[${index}].toolCalls[${callIndex}]: must be a valid tool call`,
+      );
+    }
+  }
+}
+
+function validateToolResultMessage(
+  message: Record<string, unknown>,
+  index: number,
+  details: string[],
+): void {
+  if (typeof message.content !== "string" || message.content.length === 0) {
+    details.push(`messages[${index}].content: must be a non-empty string`);
+  }
+  if (
+    typeof message.toolCallId !== "string" ||
+    message.toolCallId.trim().length === 0
+  ) {
+    details.push(`messages[${index}].toolCallId: must be a non-empty string`);
+  }
+  if (
+    typeof message.toolName !== "string" ||
+    message.toolName.trim().length === 0
+  ) {
+    details.push(`messages[${index}].toolName: must be a non-empty string`);
+  }
+  try {
+    const result = createToolResult(message.result as never);
+    if (
+      result.toolCallId !== message.toolCallId ||
+      result.toolName !== message.toolName
+    ) {
+      details.push(
+        `messages[${index}].result: must match toolCallId and toolName`,
+      );
+    }
+  } catch {
+    details.push(`messages[${index}].result: must be a valid tool result`);
+  }
+}
+
+function validateTools(value: unknown, details: string[]): void {
+  if (value === undefined) return;
+  if (!Array.isArray(value) || value.length === 0) {
+    details.push("tools: must contain at least one tool definition");
+    return;
+  }
+  for (const [index, definition] of value.entries()) {
+    try {
+      createToolDefinition(definition as never);
+    } catch {
+      details.push(`tools[${index}]: must be a valid tool definition`);
     }
   }
 }

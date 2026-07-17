@@ -1,3 +1,4 @@
+import { LLMMessageRole } from "@agentforge/provider-sdk";
 import type { Conversation } from "../Conversation.js";
 import { InvalidConversationError } from "../errors/index.js";
 import { collectConversationMessageValidation } from "./validateConversationMessage.js";
@@ -47,11 +48,43 @@ function validateMessages(
   const ids = new Set<string>();
   const createdAt = parseIsoTimestamp(createdAtValue);
   let previousTimestamp = createdAt;
+  let pendingCalls: { readonly id: string; readonly name: string }[] = [];
 
   for (const [index, message] of messages.entries()) {
     const path = `messages[${index}]`;
     details.push(...collectConversationMessageValidation(message, path));
     if (!isRecord(message)) continue;
+
+    if (
+      message.role === LLMMessageRole.Assistant &&
+      Array.isArray(message.toolCalls)
+    ) {
+      if (pendingCalls.length > 0)
+        details.push(
+          `${path}.toolCalls: previous tool calls require results first`,
+        );
+      pendingCalls = message.toolCalls
+        .filter(isRecord)
+        .filter(
+          (call) =>
+            typeof call.id === "string" && typeof call.name === "string",
+        )
+        .map((call) => ({ id: call.id as string, name: call.name as string }));
+    } else if (message.role === LLMMessageRole.Tool) {
+      const expected = pendingCalls.shift();
+      if (expected === undefined) {
+        details.push(`${path}: has no preceding assistant tool call`);
+      } else if (
+        message.toolCallId !== expected.id ||
+        message.toolName !== expected.name
+      ) {
+        details.push(
+          `${path}: must match tool call "${expected.id}" in provider order`,
+        );
+      }
+    } else if (pendingCalls.length > 0) {
+      details.push(`${path}: cannot precede pending tool results`);
+    }
 
     if (isNonEmptyString(message.id)) {
       if (ids.has(message.id)) {

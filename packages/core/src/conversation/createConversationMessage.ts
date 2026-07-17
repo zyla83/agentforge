@@ -1,4 +1,8 @@
-import type { LLMMessageRole } from "@agentforge/provider-sdk";
+import {
+  LLMMessageRole,
+  createToolCall,
+  createToolResult,
+} from "@agentforge/provider-sdk";
 import type { ConversationFactoryOptions } from "./ConversationIdGenerator.js";
 import type { ConversationMessageInput } from "./ConversationInput.js";
 import type { ConversationMessage } from "./ConversationMessage.js";
@@ -28,9 +32,25 @@ export function createConversationMessage(
   if (!isSupportedRole(inputValue.role)) {
     details.push("role: unsupported role");
   }
-  if (!isNonEmptyString(inputValue.content)) {
-    details.push("content: must be a non-empty string");
+  const isAssistantToolCall =
+    inputValue.role === LLMMessageRole.Assistant &&
+    inputValue.toolCalls !== undefined;
+  if (
+    typeof inputValue.content !== "string" ||
+    (!isAssistantToolCall && inputValue.content.trim().length === 0)
+  ) {
+    details.push(
+      isAssistantToolCall
+        ? "content: must be a string"
+        : "content: must be a non-empty string",
+    );
   }
+  const toolCalls = snapshotToolCalls(
+    inputValue.toolCalls,
+    isAssistantToolCall,
+    details,
+  );
+  const toolResult = snapshotToolResultFields(inputValue, details);
   if (
     inputValue.createdAt !== undefined &&
     parseIsoTimestamp(inputValue.createdAt) === undefined
@@ -47,14 +67,103 @@ export function createConversationMessage(
     inputValue.createdAt === undefined
       ? generateTimestamp(optionsValue)
       : (inputValue.createdAt as string);
-  const message: ConversationMessage = {
+  const base = {
     id,
-    role: inputValue.role as LLMMessageRole,
+    role: inputValue.role as ConversationMessage["role"],
     content: inputValue.content as string,
     createdAt,
   };
+  const message = Object.freeze(
+    toolCalls !== undefined
+      ? { ...base, role: LLMMessageRole.Assistant, toolCalls }
+      : toolResult !== undefined
+        ? { ...base, role: LLMMessageRole.Tool, ...toolResult }
+        : base,
+  ) as Readonly<ConversationMessage>;
   validateConversationMessage(message);
-  return Object.freeze(message);
+  return message;
+}
+
+function snapshotToolCalls(
+  value: unknown,
+  expected: boolean,
+  details: string[],
+) {
+  if (!expected) {
+    if (value !== undefined)
+      details.push("toolCalls: is only supported for assistant messages");
+    return undefined;
+  }
+  if (!Array.isArray(value) || value.length === 0) {
+    details.push("toolCalls: must contain at least one tool call");
+    return undefined;
+  }
+  const ids = new Set<string>();
+  const calls = value.map((call, index) => {
+    try {
+      const snapshot = createToolCall(call as never);
+      if (ids.has(snapshot.id))
+        details.push(`toolCalls[${index}].id: must be unique`);
+      ids.add(snapshot.id);
+      return snapshot;
+    } catch {
+      details.push(`toolCalls[${index}]: must be a valid tool call`);
+      return undefined;
+    }
+  });
+  return calls.some((call) => call === undefined)
+    ? undefined
+    : Object.freeze(calls as NonNullable<(typeof calls)[number]>[]);
+}
+
+function snapshotToolResultFields(
+  value: Record<string, unknown>,
+  details: string[],
+):
+  | {
+      readonly toolCallId: string;
+      readonly toolName: string;
+      readonly result: ReturnType<typeof createToolResult>;
+    }
+  | undefined {
+  if (value.role !== LLMMessageRole.Tool) {
+    if (
+      value.toolCallId !== undefined ||
+      value.toolName !== undefined ||
+      value.result !== undefined
+    ) {
+      details.push("tool result fields are only supported for tool messages");
+    }
+    return undefined;
+  }
+  let result: ReturnType<typeof createToolResult> | undefined;
+  try {
+    result = createToolResult(value.result as never);
+  } catch {
+    details.push("result: must be a valid tool result");
+  }
+  if (!isNonEmptyString(value.toolCallId))
+    details.push("toolCallId: must be a non-empty string");
+  if (!isNonEmptyString(value.toolName))
+    details.push("toolName: must be a non-empty string");
+  if (
+    result !== undefined &&
+    (result.toolCallId !== value.toolCallId ||
+      result.toolName !== value.toolName)
+  ) {
+    details.push("result: must match toolCallId and toolName");
+  }
+  if (
+    result === undefined ||
+    typeof value.toolCallId !== "string" ||
+    typeof value.toolName !== "string"
+  )
+    return undefined;
+  return Object.freeze({
+    toolCallId: value.toolCallId,
+    toolName: value.toolName,
+    result,
+  });
 }
 
 function validateOptions(

@@ -3,6 +3,9 @@ import {
   LLMFinishReason,
   LLMMessageRole,
   ProviderHealthStatus,
+  createToolCall,
+  createToolDefinition,
+  createToolResult,
   healthyProvider,
   throwIfProviderRequestAborted,
   validateLLMGenerationRequest,
@@ -14,6 +17,7 @@ import type {
   LLMGenerationResponse,
   LLMMessage,
   LLMProvider,
+  LLMProviderCapabilities,
   LLMStreamEvent,
   LLMStreamingProvider,
   ProviderHealth,
@@ -27,7 +31,9 @@ const DEFAULT_VERSION = "1.0.0";
 const DEFAULT_DESCRIPTION = "Deterministic mock LLM provider.";
 const DEFAULT_RESPONSE_CONTENT = "Mock response";
 const SUPPORTED_FINISH_REASONS = new Set<string>(
-  Object.values(LLMFinishReason),
+  Object.values(LLMFinishReason).filter(
+    (reason) => reason !== LLMFinishReason.ToolCalls,
+  ),
 );
 const SUPPORTED_HEALTH_STATUSES = new Set<string>(
   Object.values(ProviderHealthStatus),
@@ -35,6 +41,10 @@ const SUPPORTED_HEALTH_STATUSES = new Set<string>(
 
 export class MockLLMProvider implements LLMStreamingProvider {
   readonly metadata: Readonly<ProviderMetadata>;
+  readonly capabilities: Readonly<LLMProviderCapabilities> = Object.freeze({
+    streaming: true,
+    tools: false,
+  });
   private readonly responseContent: string;
   private readonly finishReason: LLMFinishReason;
   private readonly health: ProviderHealth;
@@ -264,12 +274,39 @@ function snapshotRequest(
     messages: readonly Readonly<LLMMessage>[];
     generation?: Readonly<LLMGenerationOptions>;
     request?: Readonly<ProviderRequestOptions>;
+    tools?: NonNullable<LLMGenerationRequest["tools"]>;
   } = {
     model: request.model,
     messages: Object.freeze(
-      request.messages.map((message) => Object.freeze({ ...message })),
+      request.messages.map((message) => {
+        if ("toolCalls" in message) {
+          return Object.freeze({
+            role: message.role,
+            content: message.content,
+            toolCalls: Object.freeze(
+              message.toolCalls.map((call) => createToolCall(call)),
+            ),
+          });
+        }
+        if (message.role === LLMMessageRole.Tool) {
+          return Object.freeze({
+            role: message.role,
+            content: message.content,
+            toolCallId: message.toolCallId,
+            toolName: message.toolName,
+            result: createToolResult(message.result),
+          });
+        }
+        return Object.freeze({ ...message });
+      }),
     ),
   };
+
+  if (request.tools !== undefined) {
+    snapshot.tools = Object.freeze(
+      request.tools.map((definition) => createToolDefinition(definition)),
+    );
+  }
 
   if (request.generation !== undefined) {
     snapshot.generation = snapshotGenerationOptions(request.generation);

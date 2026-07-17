@@ -1,5 +1,5 @@
 import type { Conversation } from "../conversation/index.js";
-import type { ConversationDocumentV1 } from "./ConversationDocument.js";
+import type { ConversationDocumentV2 } from "./ConversationDocument.js";
 import type { ConversationSerializationOptions } from "./ConversationSerializationOptions.js";
 import { InvalidConversationDocumentError } from "./errors/index.js";
 import {
@@ -21,7 +21,7 @@ export function serializeConversation(
 
 export function buildConversationDocument(
   conversation: Conversation,
-): ConversationDocumentV1 {
+): ConversationDocumentV2 {
   return {
     kind: CONVERSATION_DOCUMENT_KIND,
     version: CONVERSATION_DOCUMENT_VERSION,

@@ -43,7 +43,11 @@ describe("createConversationMessage", () => {
     expect(message).not.toBe(input);
   });
 
-  it.each(Object.values(LLMMessageRole))("supports the %s role", (role) => {
+  it.each(
+    Object.values(LLMMessageRole).filter(
+      (role) => role !== LLMMessageRole.Tool,
+    ),
+  )("supports the %s text role", (role) => {
     expect(
       createConversationMessage({
         id: `message-${role}`,
@@ -52,6 +56,26 @@ describe("createConversationMessage", () => {
         createdAt: timestamp,
       }).role,
     ).toBe(role);
+  });
+
+  it("supports a structured tool-result message", () => {
+    const result = {
+      toolCallId: "call-1",
+      toolName: "example",
+      status: "success" as const,
+      output: { value: 1 },
+    };
+    expect(
+      createConversationMessage({
+        id: "message-tool",
+        role: LLMMessageRole.Tool,
+        content: JSON.stringify(result),
+        createdAt: timestamp,
+        toolCallId: "call-1",
+        toolName: "example",
+        result,
+      }),
+    ).toMatchObject({ role: LLMMessageRole.Tool, result });
   });
 
   it("uses the platform UUID generator and current clock by default", () => {
@@ -77,7 +101,7 @@ describe("createConversationMessage", () => {
     const error = captureMessageError(() =>
       createConversationMessage({
         id: " ",
-        role: "tool" as LLMMessageRole,
+        role: "developer" as LLMMessageRole,
         content: " ",
         createdAt: "not-a-date",
       }),

@@ -7,7 +7,7 @@ import {
 } from "@agentforge/core";
 import type {
   ConversationStoreEntry,
-  ConversationStoreEntryDocumentV1,
+  ConversationStoreEntryDocumentV2,
 } from "@agentforge/core";
 import { LLMMessageRole } from "@agentforge/provider-sdk";
 import { describe, expect, it } from "vitest";
@@ -35,7 +35,7 @@ function entry(): ConversationStoreEntry {
   };
 }
 
-function document(): ConversationStoreEntryDocumentV1 {
+function document(): ConversationStoreEntryDocumentV2 {
   return {
     kind: CONVERSATION_STORE_ENTRY_DOCUMENT_KIND,
     version: CONVERSATION_STORE_ENTRY_DOCUMENT_VERSION,
@@ -62,7 +62,7 @@ function document(): ConversationStoreEntryDocumentV1 {
 describe("conversation store entry serialization", () => {
   it("serializes compact JSON in exact property order", () => {
     expect(serializeConversationStoreEntry(entry())).toBe(
-      '{"kind":"agentforge.conversation-store-entry","version":1,"entry":{"conversation":{"id":"conversation-1","createdAt":"2026-01-01T00:00:00.000Z","updatedAt":"2026-01-01T00:00:00.000Z","messages":[{"id":"message-1","role":"user","content":"Hello","createdAt":"2026-01-01T00:00:00.000Z"}]},"savedAt":"2026-01-01T01:00:00.000Z","revision":7}}',
+      '{"kind":"agentforge.conversation-store-entry","version":2,"entry":{"conversation":{"id":"conversation-1","createdAt":"2026-01-01T00:00:00.000Z","updatedAt":"2026-01-01T00:00:00.000Z","messages":[{"id":"message-1","role":"user","content":"Hello","createdAt":"2026-01-01T00:00:00.000Z"}]},"savedAt":"2026-01-01T01:00:00.000Z","revision":7}}',
     );
   });
 

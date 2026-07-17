@@ -1,11 +1,13 @@
 export type {
   ConversationDocument,
   ConversationDocumentV1,
+  ConversationDocumentV2,
 } from "./ConversationDocument.js";
 export type { ConversationSerializationOptions } from "./ConversationSerializationOptions.js";
 export type {
   ConversationStoreEntryDocument,
   ConversationStoreEntryDocumentV1,
+  ConversationStoreEntryDocumentV2,
 } from "./ConversationStoreEntryDocument.js";
 export { decodeConversationDocument } from "./decodeConversationDocument.js";
 export { decodeConversationStoreEntryDocument } from "./decodeConversationStoreEntryDocument.js";
@@ -15,8 +17,12 @@ export * from "./errors/index.js";
 export {
   CONVERSATION_DOCUMENT_KIND,
   CONVERSATION_DOCUMENT_VERSION,
+  CONVERSATION_DOCUMENT_VERSION_1,
+  CONVERSATION_DOCUMENT_VERSION_2,
   CONVERSATION_STORE_ENTRY_DOCUMENT_KIND,
   CONVERSATION_STORE_ENTRY_DOCUMENT_VERSION,
+  CONVERSATION_STORE_ENTRY_DOCUMENT_VERSION_1,
+  CONVERSATION_STORE_ENTRY_DOCUMENT_VERSION_2,
 } from "./internal/constants.js";
 export { serializeConversation } from "./serializeConversation.js";
 export { serializeConversationStoreEntry } from "./serializeConversationStoreEntry.js";

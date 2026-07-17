@@ -6,6 +6,8 @@ export type {
   ConversationStreamDeltaEvent,
   ConversationStreamEvent,
   ConversationStreamStartedEvent,
+  ConversationStreamToolCallCompletedEvent,
+  ConversationStreamToolCallStartedEvent,
 } from "./ConversationStreamEvent.js";
 export type { ConversationTurnInput } from "./ConversationTurnInput.js";
 export type { ConversationTurnResult } from "./ConversationTurnResult.js";

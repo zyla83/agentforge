@@ -1,12 +1,13 @@
 import { parseIsoTimestamp } from "../../conversation/internal/validation.js";
-import type { ConversationStoreEntryDocumentV1 } from "../ConversationStoreEntryDocument.js";
+import type { ConversationStoreEntryDocument } from "../ConversationStoreEntryDocument.js";
 import {
   InvalidConversationDocumentError,
   UnsupportedConversationDocumentVersionError,
 } from "../errors/index.js";
 import {
   CONVERSATION_STORE_ENTRY_DOCUMENT_KIND,
-  CONVERSATION_STORE_ENTRY_DOCUMENT_VERSION,
+  CONVERSATION_STORE_ENTRY_DOCUMENT_VERSION_1,
+  CONVERSATION_STORE_ENTRY_DOCUMENT_VERSION_2,
 } from "./constants.js";
 import {
   collectUnknownProperties,
@@ -20,7 +21,7 @@ const ENTRY_KEYS = new Set(["conversation", "savedAt", "revision"]);
 
 export function validateConversationStoreEntryDocument(
   value: unknown,
-): ConversationStoreEntryDocumentV1 {
+): ConversationStoreEntryDocument {
   try {
     if (!isPlainObject(value)) {
       throw new InvalidConversationDocumentError([
@@ -55,23 +56,31 @@ export function validateConversationStoreEntryDocument(
     if (
       details.length === 0 &&
       version !== undefined &&
-      version !== CONVERSATION_STORE_ENTRY_DOCUMENT_VERSION
+      version !== CONVERSATION_STORE_ENTRY_DOCUMENT_VERSION_1 &&
+      version !== CONVERSATION_STORE_ENTRY_DOCUMENT_VERSION_2
     ) {
       throw new UnsupportedConversationDocumentVersionError(
         CONVERSATION_STORE_ENTRY_DOCUMENT_KIND,
         version,
-        [CONVERSATION_STORE_ENTRY_DOCUMENT_VERSION],
+        [
+          CONVERSATION_STORE_ENTRY_DOCUMENT_VERSION_1,
+          CONVERSATION_STORE_ENTRY_DOCUMENT_VERSION_2,
+        ],
       );
     }
 
     if (!hasOwn(value, "entry")) {
       details.push("entry is required");
     } else {
-      validateEntry(value.entry, details);
+      validateEntry(
+        value.entry,
+        details,
+        version ?? CONVERSATION_STORE_ENTRY_DOCUMENT_VERSION_2,
+      );
     }
 
     if (details.length > 0) throw new InvalidConversationDocumentError(details);
-    return value as unknown as ConversationStoreEntryDocumentV1;
+    return value as unknown as ConversationStoreEntryDocument;
   } catch (error) {
     if (
       error instanceof InvalidConversationDocumentError ||
@@ -86,7 +95,11 @@ export function validateConversationStoreEntryDocument(
   }
 }
 
-function validateEntry(value: unknown, details: string[]): void {
+function validateEntry(
+  value: unknown,
+  details: string[],
+  version: number,
+): void {
   if (!isPlainObject(value)) {
     details.push("entry must be a plain object");
     return;
@@ -99,6 +112,7 @@ function validateEntry(value: unknown, details: string[]): void {
       value.conversation,
       "entry.conversation",
       details,
+      version,
     );
   }
   if (!hasOwn(value, "savedAt")) {

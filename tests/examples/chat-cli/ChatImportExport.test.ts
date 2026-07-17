@@ -142,7 +142,7 @@ describe("chat conversation import", () => {
         ...JSON.parse(
           serializeConversation(createUnicodeConversation("future")),
         ),
-        version: 2,
+        version: 3,
       }),
     ],
     [

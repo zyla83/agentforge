@@ -1,15 +1,23 @@
 import {
+  LLMFinishReason,
   LLMMessageRole,
+  createLLMGenerationResponse,
+  createToolExecutionContext,
+  getLLMProviderCapabilities,
   isLLMStreamingProvider,
   validateLLMGenerationRequest,
 } from "@agentforge/provider-sdk";
 import type {
+  JsonValue,
   LLMGenerationOptions,
   LLMGenerationRequest,
   LLMGenerationResponse,
   LLMMessage,
   LLMProvider,
   ProviderRequestOptions,
+  ToolCall,
+  ToolDefinition,
+  ToolRegistry,
 } from "@agentforge/provider-sdk";
 import {
   type AgentProfile,
@@ -19,8 +27,18 @@ import {
   appendConversationMessage,
   conversationToLLMMessages,
 } from "../conversation/index.js";
-import type { ConversationFactoryOptions } from "../conversation/index.js";
+import type {
+  Conversation,
+  ConversationFactoryOptions,
+} from "../conversation/index.js";
 import { validateConversation } from "../conversation/internal/validateConversation.js";
+import {
+  ToolExecutionAbortedError,
+  ToolExecutionPhase,
+  ToolExecutorImpl,
+  serializeToolResultContent,
+} from "../tools/index.js";
+import type { ToolExecutionRecord } from "../tools/index.js";
 import type { ConversationEngineOptions } from "./ConversationEngineOptions.js";
 import type { ConversationProviderResolver } from "./ConversationProviderResolver.js";
 import type { ConversationStreamEvent } from "./ConversationStreamEvent.js";
@@ -30,6 +48,10 @@ import {
   ConversationEngineError,
   ConversationProviderNotFoundError,
   ConversationProviderStreamingUnsupportedError,
+  ConversationProviderToolsUnsupportedError,
+  ConversationToolProtocolError,
+  ConversationToolRoundLimitError,
+  ConversationTurnAbortedError,
   ConversationTurnExecutionError,
   ConversationTurnExecutionPhase,
   InvalidConversationTurnError,
@@ -40,11 +62,17 @@ import {
   validateConversationTurnInput,
 } from "./internal/index.js";
 
+const DEFAULT_MAX_TOOL_ROUNDS = 8;
+
 interface ResolvedEngineOptions {
   readonly providers: ConversationProviderResolver;
   readonly conversationFactory?: Readonly<ConversationFactoryOptions>;
   readonly profile?: Readonly<AgentProfile>;
   readonly signal?: AbortSignal;
+  readonly tools?: ToolRegistry;
+  readonly toolExecutionEnabled: boolean;
+  readonly maxToolRounds: number;
+  readonly toolMetadata: Readonly<Record<string, JsonValue>>;
 }
 
 interface ResolvedConversationTurn {
@@ -61,6 +89,10 @@ export class ConversationEngine {
     | undefined;
   private readonly profile: Readonly<AgentProfile> | undefined;
   private readonly signal: AbortSignal | undefined;
+  private readonly tools: ToolRegistry | undefined;
+  private readonly toolExecutionEnabled: boolean;
+  private readonly maxToolRounds: number;
+  private readonly toolMetadata: Readonly<Record<string, JsonValue>>;
 
   constructor(options: ConversationEngineOptions) {
     const resolved = validateEngineOptions(options);
@@ -68,6 +100,10 @@ export class ConversationEngine {
     this.conversationFactory = resolved.conversationFactory;
     this.profile = resolved.profile;
     this.signal = resolved.signal;
+    this.tools = resolved.tools;
+    this.toolExecutionEnabled = resolved.toolExecutionEnabled;
+    this.maxToolRounds = resolved.maxToolRounds;
+    this.toolMetadata = resolved.toolMetadata;
   }
 
   async runTurn(
@@ -75,89 +111,117 @@ export class ConversationEngine {
   ): Promise<Readonly<ConversationTurnResult>> {
     const composed = composeAbortSignals([this.signal, getTurnSignal(input)]);
     try {
-      throwIfConversationTurnAborted(
-        composed.signal,
-        ConversationTurnExecutionPhase.Validation,
-      );
-      validateConversationTurnInput(input);
-      validateConversation(input.conversation);
-      const resolved = this.resolveTurn(input);
-      throwIfConversationTurnAborted(
-        composed.signal,
-        ConversationTurnExecutionPhase.Validation,
-      );
+      const prepared = this.prepareTurn(input, composed.signal);
+      let conversation = prepared.withUser;
+      const records: Readonly<ToolExecutionRecord>[] = [];
+      const callIds = new Set<string>();
+      const executor =
+        prepared.definitions === undefined
+          ? undefined
+          : new ToolExecutorImpl(this.tools as ToolRegistry);
 
-      const provider = this.resolveProvider(resolved.provider);
-      const providerName = provider.metadata.name;
-      throwIfConversationTurnAborted(
-        composed.signal,
-        ConversationTurnExecutionPhase.ProviderResolution,
-      );
-      throwIfConversationTurnAborted(
-        composed.signal,
-        ConversationTurnExecutionPhase.UserAppend,
-      );
-      const withUser = appendConversationMessage(
-        input.conversation,
-        { role: LLMMessageRole.User, content: input.content },
-        this.conversationFactory,
-      );
-      throwIfConversationTurnAborted(
-        composed.signal,
-        ConversationTurnExecutionPhase.UserAppend,
-      );
-      const userMessage = getLastMessage(
-        withUser,
-        ConversationTurnExecutionPhase.UserAppend,
-      );
-      const request = createProviderRequest(
-        withUser,
-        resolved,
-        createEffectiveRequest(input.request, composed.signal),
-      );
-      throwIfConversationTurnAborted(
-        composed.signal,
-        ConversationTurnExecutionPhase.ProviderExecution,
-      );
-      const response = await provider.generate(request);
-      throwIfConversationTurnAborted(
-        composed.signal,
-        ConversationTurnExecutionPhase.ProviderExecution,
-      );
-      throwIfConversationTurnAborted(
-        composed.signal,
-        ConversationTurnExecutionPhase.AssistantAppend,
-      );
-      const completedConversation = appendConversationMessage(
-        withUser,
-        {
-          role: LLMMessageRole.Assistant,
-          content: response.message.content,
-        },
-        this.conversationFactory,
-      );
-      throwIfConversationTurnAborted(
-        composed.signal,
-        ConversationTurnExecutionPhase.AssistantAppend,
-      );
-      const assistantMessage = getLastMessage(
-        completedConversation,
-        ConversationTurnExecutionPhase.AssistantAppend,
-      );
-      const result = Object.freeze({
-        conversation: completedConversation,
-        userMessage,
-        assistantMessage,
-        response,
-        provider: providerName,
-        model: resolved.model,
-        profile: resolved.profile?.id,
-      });
-      throwIfConversationTurnAborted(
-        composed.signal,
-        ConversationTurnExecutionPhase.Completed,
-      );
-      return result;
+      for (let round = 1; round <= this.maxToolRounds; round += 1) {
+        throwIfConversationTurnAborted(
+          composed.signal,
+          ConversationTurnExecutionPhase.ProviderExecution,
+        );
+        const rawResponse = await prepared.provider.generate(
+          createProviderRequest(
+            conversation,
+            prepared.resolved,
+            prepared.request,
+            prepared.definitions,
+          ),
+        );
+        throwIfConversationTurnAborted(
+          composed.signal,
+          ConversationTurnExecutionPhase.ProviderExecution,
+        );
+        const response = snapshotProviderResponse(
+          rawResponse,
+          prepared.providerName,
+        );
+        if ("toolCalls" in response.message) {
+          if (executor === undefined)
+            throw new ConversationToolProtocolError(
+              prepared.providerName,
+              "returned tool calls when tools are disabled",
+            );
+          validateTurnCallIds(
+            response.message.toolCalls,
+            callIds,
+            prepared.providerName,
+          );
+          conversation = appendConversationMessage(
+            conversation,
+            {
+              role: LLMMessageRole.Assistant,
+              content: response.message.content,
+              toolCalls: response.message.toolCalls,
+            },
+            this.conversationFactory,
+          );
+          for (const call of response.message.toolCalls) {
+            const record = await this.executeTool(
+              executor,
+              call,
+              composed.signal,
+            );
+            records.push(record);
+            throwIfConversationTurnAborted(
+              composed.signal,
+              ConversationTurnExecutionPhase.ToolResultAppend,
+            );
+            conversation = appendToolResult(
+              conversation,
+              record,
+              this.conversationFactory,
+            );
+          }
+          if (round === this.maxToolRounds)
+            throw new ConversationToolRoundLimitError(this.maxToolRounds);
+          throwIfConversationTurnAborted(
+            composed.signal,
+            ConversationTurnExecutionPhase.ToolLoop,
+          );
+          continue;
+        }
+
+        throwIfConversationTurnAborted(
+          composed.signal,
+          ConversationTurnExecutionPhase.AssistantAppend,
+        );
+        const completedConversation = appendConversationMessage(
+          conversation,
+          { role: LLMMessageRole.Assistant, content: response.message.content },
+          this.conversationFactory,
+        );
+        throwIfConversationTurnAborted(
+          composed.signal,
+          ConversationTurnExecutionPhase.AssistantAppend,
+        );
+        const assistantMessage = getLastMessage(
+          completedConversation,
+          ConversationTurnExecutionPhase.AssistantAppend,
+        );
+        const result = Object.freeze({
+          conversation: completedConversation,
+          userMessage: prepared.userMessage,
+          assistantMessage,
+          response,
+          provider: prepared.providerName,
+          model: prepared.resolved.model,
+          profile: prepared.resolved.profile?.id,
+          toolExecutions: Object.freeze([...records]),
+          providerRounds: round,
+        });
+        throwIfConversationTurnAborted(
+          composed.signal,
+          ConversationTurnExecutionPhase.Completed,
+        );
+        return result;
+      }
+      throw new ConversationToolRoundLimitError(this.maxToolRounds);
     } finally {
       composed.dispose();
     }
@@ -168,186 +232,227 @@ export class ConversationEngine {
   ): AsyncIterable<ConversationStreamEvent> {
     const composed = composeAbortSignals([this.signal, getTurnSignal(input)]);
     try {
-      throwIfConversationTurnAborted(
-        composed.signal,
-        ConversationTurnExecutionPhase.Validation,
-      );
-      validateConversationTurnInput(input);
-      validateConversation(input.conversation);
-      const resolved = this.resolveTurn(input);
-      throwIfConversationTurnAborted(
-        composed.signal,
-        ConversationTurnExecutionPhase.Validation,
-      );
-      const provider = this.resolveProvider(resolved.provider);
-      const providerName = provider.metadata.name;
-      throwIfConversationTurnAborted(
-        composed.signal,
-        ConversationTurnExecutionPhase.ProviderResolution,
-      );
-      if (!isLLMStreamingProvider(provider)) {
-        throw new ConversationProviderStreamingUnsupportedError(providerName);
-      }
-
-      throwIfConversationTurnAborted(
-        composed.signal,
-        ConversationTurnExecutionPhase.UserAppend,
-      );
-      const withUser = appendConversationMessage(
-        input.conversation,
-        { role: LLMMessageRole.User, content: input.content },
-        this.conversationFactory,
-      );
-      throwIfConversationTurnAborted(
-        composed.signal,
-        ConversationTurnExecutionPhase.UserAppend,
-      );
-      const userMessage = getLastMessage(
-        withUser,
-        ConversationTurnExecutionPhase.UserAppend,
-      );
-      throwIfConversationTurnAborted(
-        composed.signal,
-        ConversationTurnExecutionPhase.UserAppend,
-      );
+      const prepared = this.prepareTurn(input, composed.signal);
+      if (!isLLMStreamingProvider(prepared.provider))
+        throw new ConversationProviderStreamingUnsupportedError(
+          prepared.providerName,
+        );
+      let conversation = prepared.withUser;
+      const records: Readonly<ToolExecutionRecord>[] = [];
+      const callIds = new Set<string>();
+      const executor =
+        prepared.definitions === undefined
+          ? undefined
+          : new ToolExecutorImpl(this.tools as ToolRegistry);
       yield Object.freeze({
         type: "started",
-        conversation: withUser,
-        userMessage,
-        provider: providerName,
-        model: resolved.model,
-        profile: resolved.profile?.id,
+        conversation,
+        userMessage: prepared.userMessage,
+        provider: prepared.providerName,
+        model: prepared.resolved.model,
+        profile: prepared.resolved.profile?.id,
       });
 
-      const request = createProviderRequest(
-        withUser,
-        resolved,
-        createEffectiveRequest(input.request, composed.signal),
-      );
-      throwIfConversationTurnAborted(
-        composed.signal,
-        ConversationTurnExecutionPhase.ProviderExecution,
-      );
-      let accumulatedContent = "";
-      let deltaCount = 0;
-      let completedResponse: Readonly<LLMGenerationResponse> | undefined;
-      for await (const event of provider.stream(request)) {
-        throwIfConversationTurnAborted(
+      for (let round = 1; round <= this.maxToolRounds; round += 1) {
+        const response = yield* streamProviderRound(
+          prepared.provider,
+          createProviderRequest(
+            conversation,
+            prepared.resolved,
+            prepared.request,
+            prepared.definitions,
+          ),
+          prepared.providerName,
+          prepared.resolved,
           composed.signal,
-          ConversationTurnExecutionPhase.ProviderExecution,
         );
-        if (completedResponse !== undefined) {
-          throw streamProtocolError(
-            providerName,
-            "received an event after completion",
-          );
-        }
-        if (!isRecord(event)) {
-          throw streamProtocolError(providerName, "received an invalid event");
-        }
-        if (event.type === "delta") {
-          if (
-            typeof event.delta !== "string" ||
-            typeof event.model !== "string"
-          ) {
-            throw streamProtocolError(
-              providerName,
-              "received an invalid delta event",
+        if ("toolCalls" in response.message) {
+          if (executor === undefined)
+            throw new ConversationToolProtocolError(
+              prepared.providerName,
+              "returned tool calls when tools are disabled",
             );
+          validateTurnCallIds(
+            response.message.toolCalls,
+            callIds,
+            prepared.providerName,
+          );
+          conversation = appendConversationMessage(
+            conversation,
+            {
+              role: LLMMessageRole.Assistant,
+              content: response.message.content,
+              toolCalls: response.message.toolCalls,
+            },
+            this.conversationFactory,
+          );
+          for (const call of response.message.toolCalls) {
+            throwIfConversationTurnAborted(
+              composed.signal,
+              ConversationTurnExecutionPhase.ToolExecution,
+            );
+            yield Object.freeze({ type: "tool-call-started", call, round });
+            const record = await this.executeTool(
+              executor,
+              call,
+              composed.signal,
+            );
+            records.push(record);
+            conversation = appendToolResult(
+              conversation,
+              record,
+              this.conversationFactory,
+            );
+            yield Object.freeze({
+              type: "tool-call-completed",
+              call,
+              result: record.result,
+              round,
+            });
           }
-          if (event.delta.length === 0) continue;
-          deltaCount += 1;
-          accumulatedContent += event.delta;
-          yield Object.freeze({
-            type: "delta",
-            delta: event.delta,
-            content: accumulatedContent,
-            provider: providerName,
-            model: resolved.model,
-            profile: resolved.profile?.id,
-          });
+          if (round === this.maxToolRounds)
+            throw new ConversationToolRoundLimitError(this.maxToolRounds);
           throwIfConversationTurnAborted(
             composed.signal,
-            ConversationTurnExecutionPhase.ProviderExecution,
+            ConversationTurnExecutionPhase.ToolLoop,
           );
           continue;
         }
-        if (event.type === "completed") {
-          if (!hasResponseContent(event.response)) {
-            throw streamProtocolError(
-              providerName,
-              "received an invalid completed event",
-            );
-          }
-          completedResponse = event.response;
-          continue;
-        }
-        throw streamProtocolError(
-          providerName,
-          "received an unknown event type",
+        throwIfConversationTurnAborted(
+          composed.signal,
+          ConversationTurnExecutionPhase.AssistantAppend,
         );
-      }
-      throwIfConversationTurnAborted(
-        composed.signal,
-        ConversationTurnExecutionPhase.ProviderExecution,
-      );
-
-      if (completedResponse === undefined) {
-        throw streamProtocolError(
-          providerName,
-          "stream ended before completion",
+        const completedConversation = appendConversationMessage(
+          conversation,
+          { role: LLMMessageRole.Assistant, content: response.message.content },
+          this.conversationFactory,
         );
-      }
-      if (
-        deltaCount > 0 &&
-        completedResponse.message.content !== accumulatedContent
-      ) {
-        throw streamProtocolError(
-          providerName,
-          "completed response content does not match streamed content",
+        throwIfConversationTurnAborted(
+          composed.signal,
+          ConversationTurnExecutionPhase.AssistantAppend,
         );
+        const assistantMessage = getLastMessage(
+          completedConversation,
+          ConversationTurnExecutionPhase.AssistantAppend,
+        );
+        throwIfConversationTurnAborted(
+          composed.signal,
+          ConversationTurnExecutionPhase.Completed,
+        );
+        yield Object.freeze({
+          type: "completed",
+          conversation: completedConversation,
+          userMessage: prepared.userMessage,
+          assistantMessage,
+          response,
+          provider: prepared.providerName,
+          model: prepared.resolved.model,
+          profile: prepared.resolved.profile?.id,
+          toolExecutions: Object.freeze([...records]),
+          providerRounds: round,
+        });
+        throwIfConversationTurnAborted(
+          composed.signal,
+          ConversationTurnExecutionPhase.Completed,
+        );
+        return;
       }
-
-      throwIfConversationTurnAborted(
-        composed.signal,
-        ConversationTurnExecutionPhase.AssistantAppend,
-      );
-      const completedConversation = appendConversationMessage(
-        withUser,
-        {
-          role: LLMMessageRole.Assistant,
-          content: completedResponse.message.content,
-        },
-        this.conversationFactory,
-      );
-      throwIfConversationTurnAborted(
-        composed.signal,
-        ConversationTurnExecutionPhase.AssistantAppend,
-      );
-      const assistantMessage = getLastMessage(
-        completedConversation,
-        ConversationTurnExecutionPhase.AssistantAppend,
-      );
-      throwIfConversationTurnAborted(
-        composed.signal,
-        ConversationTurnExecutionPhase.Completed,
-      );
-      yield Object.freeze({
-        type: "completed",
-        conversation: completedConversation,
-        userMessage,
-        assistantMessage,
-        response: completedResponse,
-        provider: providerName,
-        model: resolved.model,
-        profile: resolved.profile?.id,
-      });
-      throwIfConversationTurnAborted(
-        composed.signal,
-        ConversationTurnExecutionPhase.Completed,
-      );
+      throw new ConversationToolRoundLimitError(this.maxToolRounds);
     } finally {
       composed.dispose();
+    }
+  }
+
+  private prepareTurn(
+    input: ConversationTurnInput,
+    signal: AbortSignal | undefined,
+  ) {
+    throwIfConversationTurnAborted(
+      signal,
+      ConversationTurnExecutionPhase.Validation,
+    );
+    validateConversationTurnInput(input);
+    validateConversation(input.conversation);
+    const resolved = this.resolveTurn(input);
+    const provider = this.resolveProvider(resolved.provider);
+    const providerName = provider.metadata.name;
+    throwIfConversationTurnAborted(
+      signal,
+      ConversationTurnExecutionPhase.ProviderResolution,
+    );
+    const definitions = this.resolveToolDefinitions(input.tools);
+    if (
+      definitions !== undefined &&
+      !getLLMProviderCapabilities(provider).tools
+    ) {
+      throw new ConversationProviderToolsUnsupportedError(providerName);
+    }
+    throwIfConversationTurnAborted(
+      signal,
+      ConversationTurnExecutionPhase.UserAppend,
+    );
+    const withUser = appendConversationMessage(
+      input.conversation,
+      { role: LLMMessageRole.User, content: input.content },
+      this.conversationFactory,
+    );
+    throwIfConversationTurnAborted(
+      signal,
+      ConversationTurnExecutionPhase.UserAppend,
+    );
+    return {
+      resolved,
+      provider,
+      providerName,
+      definitions,
+      withUser,
+      userMessage: getLastMessage(
+        withUser,
+        ConversationTurnExecutionPhase.UserAppend,
+      ),
+      request: createEffectiveRequest(input.request, signal),
+    };
+  }
+
+  private resolveToolDefinitions(
+    selection: ConversationTurnInput["tools"],
+  ): readonly Readonly<ToolDefinition>[] | undefined {
+    const enabled =
+      selection === undefined ? this.toolExecutionEnabled : selection !== false;
+    if (!enabled || this.tools === undefined) return undefined;
+    const all = this.tools.listDefinitions();
+    if (Array.isArray(selection)) {
+      const selected = new Set(selection);
+      const unknown = selection.filter((name) => !this.tools?.has(name));
+      if (unknown.length > 0)
+        throw new InvalidConversationTurnError(
+          unknown.map((name) => `tools: tool "${name}" is not registered`),
+        );
+      const subset = all.filter(({ name }) => selected.has(name));
+      return subset.length === 0 ? undefined : Object.freeze(subset);
+    }
+    return all.length === 0 ? undefined : all;
+  }
+
+  private async executeTool(
+    executor: ToolExecutorImpl,
+    call: Readonly<ToolCall>,
+    signal: AbortSignal | undefined,
+  ): Promise<Readonly<ToolExecutionRecord>> {
+    try {
+      const result = await executor.execute(call, {
+        ...(signal === undefined ? {} : { signal }),
+        metadata: this.toolMetadata,
+      });
+      return Object.freeze({ call, result });
+    } catch (error) {
+      if (error instanceof ToolExecutionAbortedError) {
+        throw new ConversationTurnAbortedError(
+          mapToolExecutionPhase(error.phase),
+          { reason: error.reason, cause: error },
+        );
+      }
+      throw error;
     }
   }
 
@@ -357,12 +462,10 @@ export class ConversationEngine {
         ? this.profile
         : createAgentProfile(input.profile);
     const model = input.model ?? profile?.model;
-    if (model === undefined) {
+    if (model === undefined)
       throw new InvalidConversationTurnError([
         "model: is required when no profile model is available",
       ]);
-    }
-
     return Object.freeze({
       profile,
       model,
@@ -376,24 +479,111 @@ export class ConversationEngine {
       name === undefined
         ? this.providers.getDefaultLLMProvider()
         : this.providers.getLLMProvider(name);
-    if (provider === undefined) {
+    if (provider === undefined)
       throw new ConversationProviderNotFoundError(name);
-    }
     return provider;
   }
+}
+
+function mapToolExecutionPhase(
+  phase: ToolExecutionPhase,
+): ConversationTurnExecutionPhase {
+  if (phase === ToolExecutionPhase.Resolution) {
+    return ConversationTurnExecutionPhase.ToolResolution;
+  }
+  if (phase === ToolExecutionPhase.ArgumentValidation) {
+    return ConversationTurnExecutionPhase.ToolArgumentValidation;
+  }
+  if (phase === ToolExecutionPhase.Result) {
+    return ConversationTurnExecutionPhase.ToolResultAppend;
+  }
+  return ConversationTurnExecutionPhase.ToolExecution;
+}
+
+async function* streamProviderRound(
+  provider: LLMProvider,
+  request: LLMGenerationRequest,
+  providerName: string,
+  resolved: ResolvedConversationTurn,
+  signal: AbortSignal | undefined,
+): AsyncGenerator<ConversationStreamEvent, Readonly<LLMGenerationResponse>> {
+  if (!isLLMStreamingProvider(provider))
+    throw new ConversationProviderStreamingUnsupportedError(providerName);
+  throwIfConversationTurnAborted(
+    signal,
+    ConversationTurnExecutionPhase.ProviderExecution,
+  );
+  let accumulatedContent = "";
+  let deltaCount = 0;
+  let completed: Readonly<LLMGenerationResponse> | undefined;
+  for await (const event of provider.stream(request)) {
+    throwIfConversationTurnAborted(
+      signal,
+      ConversationTurnExecutionPhase.ProviderExecution,
+    );
+    if (completed !== undefined)
+      throw streamProtocolError(
+        providerName,
+        "received an event after completion",
+      );
+    if (!isRecord(event))
+      throw streamProtocolError(providerName, "received an invalid event");
+    if (event.type === "delta") {
+      if (typeof event.delta !== "string" || typeof event.model !== "string")
+        throw streamProtocolError(
+          providerName,
+          "received an invalid delta event",
+        );
+      if (event.delta.length === 0) continue;
+      deltaCount += 1;
+      accumulatedContent += event.delta;
+      yield Object.freeze({
+        type: "delta",
+        delta: event.delta,
+        content: accumulatedContent,
+        provider: providerName,
+        model: resolved.model,
+        profile: resolved.profile?.id,
+      });
+      continue;
+    }
+    if (event.type === "completed") {
+      completed = snapshotProviderResponse(event.response, providerName);
+      continue;
+    }
+    throw streamProtocolError(providerName, "received an unknown event type");
+  }
+  throwIfConversationTurnAborted(
+    signal,
+    ConversationTurnExecutionPhase.ProviderExecution,
+  );
+  if (completed === undefined)
+    throw streamProtocolError(providerName, "stream ended before completion");
+  if ("toolCalls" in completed.message) {
+    if (deltaCount > 0)
+      throw new ConversationToolProtocolError(
+        providerName,
+        "emitted text deltas before completing with tool calls",
+      );
+  } else if (
+    deltaCount > 0 &&
+    completed.message.content !== accumulatedContent
+  ) {
+    throw streamProtocolError(
+      providerName,
+      "completed response content does not match streamed content",
+    );
+  }
+  return completed;
 }
 
 function validateEngineOptions(
   options: ConversationEngineOptions,
 ): ResolvedEngineOptions {
   const value: unknown = options;
-  if (!isRecord(value)) {
-    throw engineOptionsError("options must be an object");
-  }
-  if (!isRecord(value.providers)) {
-    throw engineOptionsError("providers must be an object");
-  }
+  if (!isRecord(value)) throw engineOptionsError("options must be an object");
   if (
+    !isRecord(value.providers) ||
     typeof value.providers.getLLMProvider !== "function" ||
     typeof value.providers.getDefaultLLMProvider !== "function"
   ) {
@@ -401,7 +591,6 @@ function validateEngineOptions(
       "providers must expose callable getLLMProvider and getDefaultLLMProvider methods",
     );
   }
-
   const conversationFactory = snapshotConversationFactory(
     value.conversationFactory,
   );
@@ -409,50 +598,79 @@ function validateEngineOptions(
     value.profile === undefined
       ? undefined
       : createAgentProfile(value.profile as never);
-  if (value.signal !== undefined && !(value.signal instanceof AbortSignal)) {
+  if (value.signal !== undefined && !(value.signal instanceof AbortSignal))
     throw engineOptionsError("signal must be an AbortSignal");
-  }
+  const tools = snapshotRegistry(value.tools);
+  const execution = snapshotToolExecution(value.toolExecution);
   return {
     providers: value.providers as unknown as ConversationProviderResolver,
     ...(conversationFactory === undefined ? {} : { conversationFactory }),
     ...(profile === undefined ? {} : { profile }),
     ...(value.signal === undefined ? {} : { signal: value.signal }),
+    ...(tools === undefined ? {} : { tools }),
+    ...execution,
   };
 }
 
-function snapshotConversationFactory(
-  value: unknown,
-): Readonly<ConversationFactoryOptions> | undefined {
+function snapshotRegistry(value: unknown): ToolRegistry | undefined {
   if (value === undefined) return undefined;
-  if (!isRecord(value)) {
-    throw engineOptionsError("conversationFactory must be an object");
-  }
-  const details: string[] = [];
   if (
-    value.idGenerator !== undefined &&
-    typeof value.idGenerator !== "function"
+    !isRecord(value) ||
+    ["has", "get", "require", "getDefinition", "list", "listDefinitions"].some(
+      (method) => typeof value[method] !== "function",
+    )
   ) {
-    details.push("conversationFactory.idGenerator must be a function");
+    throw engineOptionsError(
+      "tools must expose the read-only ToolRegistry methods",
+    );
   }
-  if (value.now !== undefined && typeof value.now !== "function") {
-    details.push("conversationFactory.now must be a function");
+  return value as unknown as ToolRegistry;
+}
+
+function snapshotToolExecution(
+  value: unknown,
+): Pick<
+  ResolvedEngineOptions,
+  "toolExecutionEnabled" | "maxToolRounds" | "toolMetadata"
+> {
+  if (value !== undefined && !isRecord(value))
+    throw engineOptionsError("toolExecution must be an object");
+  const options = (value ?? {}) as Record<string, unknown>;
+  if (options.enabled !== undefined && typeof options.enabled !== "boolean")
+    throw engineOptionsError("toolExecution.enabled must be a boolean");
+  const maxRounds = options.maxRounds ?? DEFAULT_MAX_TOOL_ROUNDS;
+  if (
+    typeof maxRounds !== "number" ||
+    !Number.isInteger(maxRounds) ||
+    maxRounds < 1 ||
+    maxRounds > 32
+  )
+    throw engineOptionsError(
+      "toolExecution.maxRounds must be an integer from 1 through 32",
+    );
+  let metadata: Readonly<Record<string, JsonValue>>;
+  try {
+    metadata = createToolExecutionContext({
+      metadata: options.metadata as never,
+    }).metadata;
+  } catch (error) {
+    throw engineOptionsError(
+      "toolExecution.metadata must be a JSON object",
+      error,
+    );
   }
-  if (details.length > 0) throw engineOptionsError(details.join("; "));
-  const snapshot: ConversationFactoryOptions = {
-    ...(typeof value.idGenerator === "function"
-      ? { idGenerator: value.idGenerator as () => string }
-      : {}),
-    ...(typeof value.now === "function"
-      ? { now: value.now as () => Date }
-      : {}),
+  return {
+    toolExecutionEnabled: options.enabled === true,
+    maxToolRounds: maxRounds,
+    toolMetadata: metadata,
   };
-  return Object.freeze(snapshot);
 }
 
 function createProviderRequest(
-  conversation: Parameters<typeof conversationToLLMMessages>[0],
+  conversation: Conversation,
   resolved: ResolvedConversationTurn,
   effectiveRequest: Readonly<ProviderRequestOptions> | undefined,
+  tools: readonly Readonly<ToolDefinition>[] | undefined,
 ): LLMGenerationRequest {
   const request: LLMGenerationRequest = {
     model: resolved.model,
@@ -461,9 +679,58 @@ function createProviderRequest(
       ? {}
       : { generation: resolved.generation }),
     ...(effectiveRequest === undefined ? {} : { request: effectiveRequest }),
+    ...(tools === undefined ? {} : { tools }),
   };
   validateLLMGenerationRequest(request);
-  return request;
+  return Object.freeze(request);
+}
+
+function appendToolResult(
+  conversation: Readonly<Conversation>,
+  record: Readonly<ToolExecutionRecord>,
+  options: ConversationFactoryOptions | undefined,
+): Readonly<Conversation> {
+  return appendConversationMessage(
+    conversation,
+    {
+      role: LLMMessageRole.Tool,
+      content: serializeToolResultContent(record.result),
+      toolCallId: record.call.id,
+      toolName: record.call.name,
+      result: record.result,
+    },
+    options,
+  );
+}
+
+function snapshotProviderResponse(
+  response: LLMGenerationResponse,
+  provider: string,
+): Readonly<LLMGenerationResponse> {
+  try {
+    return createLLMGenerationResponse(response);
+  } catch (error) {
+    throw new ConversationToolProtocolError(
+      provider,
+      "returned an invalid generation response",
+      { cause: error },
+    );
+  }
+}
+
+function validateTurnCallIds(
+  calls: readonly Readonly<ToolCall>[],
+  ids: Set<string>,
+  provider: string,
+): void {
+  for (const call of calls) {
+    if (ids.has(call.id))
+      throw new ConversationToolProtocolError(
+        provider,
+        `reused tool call ID "${call.id}"`,
+      );
+    ids.add(call.id);
+  }
 }
 
 function createEffectiveRequest(
@@ -480,17 +747,15 @@ function createEffectiveRequest(
 }
 
 function createProviderMessages(
-  conversation: Parameters<typeof conversationToLLMMessages>[0],
+  conversation: Conversation,
   profile: Readonly<AgentProfile> | undefined,
 ): readonly Readonly<LLMMessage>[] {
   const messages = conversationToLLMMessages(conversation);
   if (profile === undefined) return messages;
-
-  const systemMessage = Object.freeze({
-    role: LLMMessageRole.System,
-    content: profile.systemPrompt,
-  });
-  return Object.freeze([systemMessage, ...messages]);
+  return Object.freeze([
+    { role: LLMMessageRole.System, content: profile.systemPrompt },
+    ...messages,
+  ]);
 }
 
 function mergeGeneration(
@@ -511,34 +776,51 @@ function mergeGeneration(
   });
 }
 
+function snapshotConversationFactory(
+  value: unknown,
+): Readonly<ConversationFactoryOptions> | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value))
+    throw engineOptionsError("conversationFactory must be an object");
+  if (
+    value.idGenerator !== undefined &&
+    typeof value.idGenerator !== "function"
+  )
+    throw engineOptionsError(
+      "conversationFactory.idGenerator must be a function",
+    );
+  if (value.now !== undefined && typeof value.now !== "function")
+    throw engineOptionsError("conversationFactory.now must be a function");
+  return Object.freeze({
+    ...(typeof value.idGenerator === "function"
+      ? { idGenerator: value.idGenerator as () => string }
+      : {}),
+    ...(typeof value.now === "function"
+      ? { now: value.now as () => Date }
+      : {}),
+  });
+}
+
 function getLastMessage(
-  conversation: Parameters<typeof conversationToLLMMessages>[0],
+  conversation: Conversation,
   phase: ConversationTurnExecutionPhase,
 ) {
   const message = conversation.messages.at(-1);
-  if (message === undefined) {
+  if (message === undefined)
     throw new ConversationTurnExecutionError(
       phase,
       "Conversation engine failed to append a message.",
     );
-  }
   return message;
 }
 
 function getTurnSignal(input: ConversationTurnInput): AbortSignal | undefined {
   const value: unknown = input;
-  if (!isRecord(value) || !isRecord(value.request)) return undefined;
-  return value.request.signal instanceof AbortSignal
+  return isRecord(value) &&
+    isRecord(value.request) &&
+    value.request.signal instanceof AbortSignal
     ? value.request.signal
     : undefined;
-}
-
-function hasResponseContent(value: unknown): value is LLMGenerationResponse {
-  return (
-    isRecord(value) &&
-    isRecord(value.message) &&
-    typeof value.message.content === "string"
-  );
 }
 
 function streamProtocolError(
@@ -550,9 +832,13 @@ function streamProtocolError(
   );
 }
 
-function engineOptionsError(detail: string): ConversationEngineError {
+function engineOptionsError(
+  detail: string,
+  cause?: unknown,
+): ConversationEngineError {
   return new ConversationEngineError(
     `Conversation engine options are invalid: ${detail}.`,
+    cause === undefined ? undefined : { cause },
   );
 }
 

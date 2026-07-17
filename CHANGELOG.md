@@ -80,3 +80,9 @@
 - Exact, case-sensitive `AgentForge` tool registration with ordered lookup and listing
 - Stable read-only tool registry access through `PluginContext`
 - Typed duplicate-tool and missing-tool registry errors
+- Provider-neutral LLM tool definitions, tool calls, result messages, and capability metadata
+- Limited JSON Schema argument validation and immutable sequential tool execution
+- Structured model-visible failures for missing tools, invalid arguments, handler failures, and invalid outputs
+- Opt-in bounded multi-round tool orchestration for complete and streaming conversation turns
+- Streaming tool-call lifecycle events with immutable execution records
+- V2 conversation and store-entry serialization with backward-compatible V1 decoding

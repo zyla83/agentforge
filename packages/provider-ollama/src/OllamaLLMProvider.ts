@@ -28,6 +28,7 @@ import {
 import type {
   LLMGenerationRequest,
   LLMGenerationResponse,
+  LLMProviderCapabilities,
   LLMStreamEvent,
   LLMStreamingProvider,
   ProviderHealth,
@@ -68,6 +69,10 @@ interface CompatibleOllamaClient {
 
 export class OllamaLLMProvider implements LLMStreamingProvider {
   readonly metadata: Readonly<ProviderMetadata>;
+  readonly capabilities: Readonly<LLMProviderCapabilities> = Object.freeze({
+    streaming: true,
+    tools: false,
+  });
   private readonly client: CompatibleOllamaClient;
   private readonly healthCheck: Readonly<OllamaHealthCheckOptions> | undefined;
 
@@ -184,6 +189,7 @@ export class OllamaLLMProvider implements LLMStreamingProvider {
     request: LLMGenerationRequest,
   ): Promise<LLMGenerationResponse> {
     validateLLMGenerationRequest(request);
+    assertToolsUnsupported(this.metadata.name, request);
     throwIfProviderRequestAborted(this.metadata.name, request.request);
     const mapped = mapGenerationRequest(request);
 
@@ -197,6 +203,7 @@ export class OllamaLLMProvider implements LLMStreamingProvider {
 
   async *stream(request: LLMGenerationRequest): AsyncIterable<LLMStreamEvent> {
     validateLLMGenerationRequest(request);
+    assertToolsUnsupported(this.metadata.name, request);
     throwIfProviderRequestAborted(this.metadata.name, request.request);
     const mapped = mapGenerationRequest(request);
     let model: string | undefined;
@@ -264,6 +271,23 @@ export class OllamaLLMProvider implements LLMStreamingProvider {
       if (error instanceof ProviderError) throw error;
       throw mapOllamaClientError(this.metadata.name, error);
     }
+  }
+}
+
+function assertToolsUnsupported(
+  providerName: string,
+  request: LLMGenerationRequest,
+): void {
+  if (
+    request.tools !== undefined ||
+    request.messages.some(
+      (message) => message.role === "tool" || "toolCalls" in message,
+    )
+  ) {
+    throw new ProviderRequestError(
+      providerName,
+      `Provider "${resolveProviderName(providerName)}" does not support tool calling.`,
+    );
   }
 }
 

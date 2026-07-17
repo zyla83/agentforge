@@ -203,9 +203,7 @@ and numeric minimum/maximum limits. References, schema composition, patterns,
 formats, conditionals, tuple schemas, and recursive schemas are not supported.
 
 Argument validation against a registered definition, handler execution,
-retries, timeouts, and provider wire-format mapping are intentionally deferred
-to later tasks. Existing LLM request, response, conversation, and serialization
-contracts do not carry tool data yet.
+retries, per-tool timeouts, and provider wire-format mapping remain deferred.
 
 ## Tool registry
 
@@ -225,8 +223,37 @@ agent.getRegisteredToolDefinitions();
 `getTool()`, `requireTool()`, and `getRegisteredTools()` expose immutable
 definition-handler associations to framework consumers. Plugins receive a
 stable read-only `context.tools` view with the same lookup and listing methods,
-but no registration method. Registration does not execute handlers or expose
-tools to LLM providers; those integrations are deferred to later tasks.
+but no registration method. Registration alone does not execute handlers or
+expose tools to LLM providers.
+
+## Tool execution
+
+Tool execution is provider-neutral and explicitly enabled on a conversation
+engine. Definitions are sent without handlers; returned calls are resolved by
+exact name, validated against their registered schemas, and executed
+sequentially. Controlled failures are returned to the provider as structured
+tool results so it can recover in a later round.
+
+```ts
+const engine = agent.createConversationEngine({
+  toolExecution: { enabled: true, maxRounds: 8 },
+});
+
+const result = await engine.runTurn({
+  conversation,
+  content: "What time is it?",
+  model: "tool-capable-model",
+});
+```
+
+Tools are disabled by default. A turn may use `tools: true`, `tools: false`, or
+an exact-name array to override the engine setting; selected definitions retain
+registry order. Cancellation aborts the entire turn, and the provider-round
+limit prevents infinite tool loops. Streaming emits ordered tool-call start and
+completion events. The Ollama provider remains tool-unsupported until Task-029,
+so current Ollama chat sessions continue using text generation only.
+Schema string limits use JavaScript `string.length` (UTF-16 code units); values
+are never coerced and schema defaults are never injected.
 
 ## Conversation model
 
@@ -313,9 +340,11 @@ Node-specific durable storage. Engine execution never saves automatically.
 
 ## Conversation serialization
 
-Conversation documents use the explicit `agentforge.conversation` kind and V1
-schema version. Serialization produces deterministic JSON in compact form by
-default or with standard two-space indentation when `pretty` is enabled.
+Conversation documents use the explicit `agentforge.conversation` kind and V2
+schema version, including tool-call and tool-result history. Serialization
+produces deterministic JSON in compact form by default or with standard
+two-space indentation when `pretty` is enabled. Valid V1 documents remain
+readable and are upgraded to the current in-memory model.
 
 ```ts
 const serialized = serializeConversation(conversation, {
@@ -330,7 +359,7 @@ JSON, invalid document structure, and unsupported future versions produce
 distinct typed errors. Restored conversations are deeply immutable snapshots.
 
 Conversation-store entries use the separate
-`agentforge.conversation-store-entry` V1 envelope and preserve persistence
+`agentforge.conversation-store-entry` V2 envelope and preserve persistence
 metadata:
 
 ```ts
@@ -344,9 +373,10 @@ compatibility boundary and is intentionally separate from runtime interfaces.
 
 ## Conversation engine
 
-The stateless conversation engine orchestrates one immutable user-to-assistant
-turn. It resolves the default or an explicitly named provider, while leaving the
-source conversation unchanged.
+The stateless conversation engine orchestrates an immutable user-to-assistant
+turn, including bounded provider/tool rounds when explicitly enabled. It
+resolves the default or an explicitly named provider while leaving the source
+conversation unchanged.
 
 ```ts
 const engine = agent.createConversationEngine();

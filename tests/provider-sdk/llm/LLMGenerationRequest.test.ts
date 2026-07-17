@@ -42,11 +42,29 @@ describe("validateLLMGenerationRequest valid requests", () => {
   });
 
   it("accepts all supported message roles", () => {
+    const result = {
+      toolCallId: "call-1",
+      toolName: "example",
+      status: "success" as const,
+      output: { value: "done" },
+    };
     const request = createRequest({
       messages: [
         { role: LLMMessageRole.System, content: "Follow instructions." },
         { role: LLMMessageRole.User, content: "Hello" },
         { role: LLMMessageRole.Assistant, content: "Hi" },
+        {
+          role: LLMMessageRole.Assistant,
+          content: "",
+          toolCalls: [{ id: "call-1", name: "example", arguments: {} }],
+        },
+        {
+          role: LLMMessageRole.Tool,
+          content: '{"status":"success","output":{"value":"done"}}',
+          toolCallId: "call-1",
+          toolName: "example",
+          result,
+        },
       ],
     });
 
@@ -163,7 +181,7 @@ describe("validateLLMGenerationRequest malformed requests", () => {
 
   it("rejects unsupported roles", () => {
     const request = createRequest({
-      messages: [{ role: "tool", content: "Result" }] as never,
+      messages: [{ role: "developer", content: "Result" }] as never,
     });
 
     expect(captureInvalidRequest(request).details).toEqual([
@@ -303,7 +321,7 @@ describe("InvalidLLMRequestError aggregation", () => {
   it("collects details in deterministic order", () => {
     const error = captureInvalidRequest({
       model: " ",
-      messages: [{ role: "tool", content: "" }, null],
+      messages: [{ role: "developer", content: "" }, null],
       generation: {
         temperature: 3,
         topP: 0,

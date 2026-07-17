@@ -82,7 +82,7 @@ describe("conversation runtime validation", () => {
   it("reports malformed message fields in deterministic order", () => {
     const conversation = validConversation();
     conversation.messages = [
-      { id: "", role: "tool", content: " ", createdAt: "invalid" },
+      { id: "", role: "developer", content: " ", createdAt: "invalid" },
     ];
     const error = captureConversationError(() =>
       conversationToLLMMessages(conversation as never),

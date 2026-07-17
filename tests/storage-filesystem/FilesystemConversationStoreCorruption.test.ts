@@ -75,7 +75,7 @@ describe("FilesystemConversationStore corrupted files", () => {
     [
       "unsupported version",
       (document: Record<string, unknown>) => {
-        document.version = 2;
+        document.version = 3;
       },
     ],
     [

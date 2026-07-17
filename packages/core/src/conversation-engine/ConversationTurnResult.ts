@@ -3,6 +3,7 @@ import type {
   Conversation,
   ConversationMessage,
 } from "../conversation/index.js";
+import type { ToolExecutionRecord } from "../tools/index.js";
 
 export interface ConversationTurnResult {
   readonly conversation: Readonly<Conversation>;
@@ -12,4 +13,6 @@ export interface ConversationTurnResult {
   readonly provider: string;
   readonly model: string;
   readonly profile: string | undefined;
+  readonly toolExecutions: readonly Readonly<ToolExecutionRecord>[];
+  readonly providerRounds: number;
 }

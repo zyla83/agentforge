@@ -158,17 +158,19 @@ describe("ConversationEngine turn validation", () => {
     ).rejects.toMatchObject({ provider: " Missing " });
   });
 
-  it("accepts all supported user history roles", () => {
+  it("accepts all supported text history roles", () => {
     expect(
       createConversation({
         id: "roles",
         createdAt: "2026-07-16T10:00:00.000Z",
-        messages: Object.values(LLMMessageRole).map((role, index) => ({
-          id: String(index),
-          role,
-          content: role,
-          createdAt: "2026-07-16T10:00:00.000Z",
-        })),
+        messages: Object.values(LLMMessageRole)
+          .filter((role) => role !== LLMMessageRole.Tool)
+          .map((role, index) => ({
+            id: String(index),
+            role,
+            content: role,
+            createdAt: "2026-07-16T10:00:00.000Z",
+          })),
       }),
     ).toBeDefined();
   });

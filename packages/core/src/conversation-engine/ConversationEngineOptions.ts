@@ -1,3 +1,4 @@
+import type { JsonValue, ToolRegistry } from "@agentforge/provider-sdk";
 import type { AgentProfile } from "../agent-profile/index.js";
 import type { ConversationFactoryOptions } from "../conversation/index.js";
 import type { ConversationProviderResolver } from "./ConversationProviderResolver.js";
@@ -7,4 +8,10 @@ export interface ConversationEngineOptions {
   readonly conversationFactory?: ConversationFactoryOptions;
   readonly profile?: AgentProfile;
   readonly signal?: AbortSignal;
+  readonly tools?: ToolRegistry;
+  readonly toolExecution?: {
+    readonly enabled?: boolean;
+    readonly maxRounds?: number;
+    readonly metadata?: Readonly<Record<string, JsonValue>>;
+  };
 }

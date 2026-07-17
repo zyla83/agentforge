@@ -1,7 +1,7 @@
 import type { ConversationStoreEntry } from "../conversation-store/index.js";
 import { parseIsoTimestamp } from "../conversation/internal/validation.js";
 import type { ConversationSerializationOptions } from "./ConversationSerializationOptions.js";
-import type { ConversationStoreEntryDocumentV1 } from "./ConversationStoreEntryDocument.js";
+import type { ConversationStoreEntryDocumentV2 } from "./ConversationStoreEntryDocument.js";
 import { InvalidConversationDocumentError } from "./errors/index.js";
 import {
   CONVERSATION_STORE_ENTRY_DOCUMENT_KIND,
@@ -20,7 +20,7 @@ export function serializeConversationStoreEntry(
 
 function buildStoreEntryDocument(
   entry: ConversationStoreEntry,
-): ConversationStoreEntryDocumentV1 {
+): ConversationStoreEntryDocumentV2 {
   if (!isPlainObject(entry)) {
     throw new InvalidConversationDocumentError([
       "entry must be a plain object",

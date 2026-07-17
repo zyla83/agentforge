@@ -5,7 +5,7 @@ import {
   deserializeConversation,
   serializeConversation,
 } from "@agentforge/core";
-import type { Conversation, ConversationDocumentV1 } from "@agentforge/core";
+import type { Conversation, ConversationDocumentV2 } from "@agentforge/core";
 import { LLMMessageRole } from "@agentforge/provider-sdk";
 import { describe, expect, it } from "vitest";
 
@@ -49,7 +49,7 @@ function emptyConversation(): Conversation {
   };
 }
 
-function document(): ConversationDocumentV1 {
+function document(): ConversationDocumentV2 {
   return {
     kind: CONVERSATION_DOCUMENT_KIND,
     version: CONVERSATION_DOCUMENT_VERSION,
@@ -70,9 +70,9 @@ function document(): ConversationDocumentV1 {
 }
 
 describe("conversation serialization", () => {
-  it("serializes compact V1 JSON in deterministic property order", () => {
+  it("serializes compact V2 JSON in deterministic property order", () => {
     expect(serializeConversation(emptyConversation())).toBe(
-      '{"kind":"agentforge.conversation","version":1,"conversation":{"id":"conversation-1","createdAt":"2026-01-01T00:00:00.000Z","updatedAt":"2026-01-01T00:00:00.000Z","messages":[]}}',
+      '{"kind":"agentforge.conversation","version":2,"conversation":{"id":"conversation-1","createdAt":"2026-01-01T00:00:00.000Z","updatedAt":"2026-01-01T00:00:00.000Z","messages":[]}}',
     );
   });
 
