@@ -202,10 +202,31 @@ primitive `enum` and `const`; object `properties`, `required`, and
 and numeric minimum/maximum limits. References, schema composition, patterns,
 formats, conditionals, tuple schemas, and recursive schemas are not supported.
 
-Tool registration, argument validation against a registered definition, handler
-execution, retries, timeouts, and provider wire-format mapping are intentionally
-deferred to later tasks. Existing LLM request, response, conversation, and
-serialization contracts do not carry tool data yet.
+Argument validation against a registered definition, handler execution,
+retries, timeouts, and provider wire-format mapping are intentionally deferred
+to later tasks. Existing LLM request, response, conversation, and serialization
+contracts do not carry tool data yet.
+
+## Tool registry
+
+Task-026 defines the provider-neutral tool contracts; the registry associates
+those immutable definitions with handlers. Tools can be registered before
+`AgentForge.start()` while the framework is in the `created` state. Names are
+unique, exact, and case-sensitive, and listings preserve registration order.
+
+```ts
+const agent = new AgentForge().registerTool(definition, handler);
+
+agent.hasTool("current_time");
+agent.getToolDefinition("current_time");
+agent.getRegisteredToolDefinitions();
+```
+
+`getTool()`, `requireTool()`, and `getRegisteredTools()` expose immutable
+definition-handler associations to framework consumers. Plugins receive a
+stable read-only `context.tools` view with the same lookup and listing methods,
+but no registration method. Registration does not execute handlers or expose
+tools to LLM providers; those integrations are deferred to later tasks.
 
 ## Conversation model
 

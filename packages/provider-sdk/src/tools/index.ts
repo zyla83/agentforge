@@ -20,6 +20,8 @@ export type {
   ToolExecutionContextOptions,
 } from "./ToolExecutionContext.js";
 export type { ToolHandler, TypedToolHandler } from "./ToolHandler.js";
+export type { RegisteredTool } from "./RegisteredTool.js";
+export type { ToolRegistry } from "./ToolRegistry.js";
 export type {
   ToolFailureResult,
   ToolResult,
@@ -29,3 +31,4 @@ export { validateToolCall } from "./validateToolCall.js";
 export { validateToolDefinition } from "./validateToolDefinition.js";
 export { validateToolResult } from "./validateToolResult.js";
 export * from "./errors/index.js";
+export * from "./registry-errors/index.js";

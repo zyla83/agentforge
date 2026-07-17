@@ -15,6 +15,10 @@ import type {
   LLMProvider,
   LLMProviderRegistry,
   ProviderMetadata,
+  RegisteredTool,
+  ToolDefinition,
+  ToolHandler,
+  ToolRegistry,
 } from "@agentforge/provider-sdk";
 import {
   DuplicatePluginError,
@@ -32,6 +36,7 @@ import {
 } from "./conversation-engine/index.js";
 import type { ConversationFactoryOptions } from "./conversation/index.js";
 import { LLMProviderRegistryImpl } from "./providers/index.js";
+import { ToolRegistryImpl } from "./tools/index.js";
 import { snapshotPluginMetadata } from "./validatePluginMetadata.js";
 import { AGENTFORGE_VERSION } from "./version.js";
 
@@ -53,6 +58,8 @@ export class AgentForge {
   private readonly llmProviderRegistry = new LLMProviderRegistryImpl();
   private readonly llmProviderRegistryView: LLMProviderRegistry =
     this.llmProviderRegistry.getView();
+  private readonly toolRegistry = new ToolRegistryImpl();
+  private readonly toolRegistryView: ToolRegistry = this.toolRegistry.getView();
   private state = AgentForgeState.Created;
 
   constructor(config?: AgentForgeConfigInput, options?: AgentForgeOptions) {
@@ -107,6 +114,17 @@ export class AgentForge {
     return this;
   }
 
+  registerTool(definition: ToolDefinition, handler: ToolHandler): this {
+    this.assertState("register a tool", AgentForgeState.Created);
+    const registered = this.toolRegistry.register(definition, handler);
+
+    this.logger.debug("Tool registered", {
+      toolName: registered.definition.name,
+    });
+
+    return this;
+  }
+
   async start(): Promise<void> {
     this.assertState("start", AgentForgeState.Created);
     this.state = AgentForgeState.Starting;
@@ -130,6 +148,7 @@ export class AgentForge {
           configuration: this.config.plugins[metadata.name],
           logger: pluginLogger,
           llmProviders: this.llmProviderRegistryView,
+          tools: this.toolRegistryView,
         });
         this.initializedPlugins.push({
           ...registeredPlugin,
@@ -223,6 +242,30 @@ export class AgentForge {
 
   getRegisteredLLMProviders(): readonly Readonly<ProviderMetadata>[] {
     return this.llmProviderRegistry.list();
+  }
+
+  hasTool(name: string): boolean {
+    return this.toolRegistry.has(name);
+  }
+
+  getTool(name: string): Readonly<RegisteredTool> | undefined {
+    return this.toolRegistry.get(name);
+  }
+
+  requireTool(name: string): Readonly<RegisteredTool> {
+    return this.toolRegistry.require(name);
+  }
+
+  getToolDefinition(name: string): Readonly<ToolDefinition> | undefined {
+    return this.toolRegistry.getDefinition(name);
+  }
+
+  getRegisteredTools(): readonly Readonly<RegisteredTool>[] {
+    return this.toolRegistry.list();
+  }
+
+  getRegisteredToolDefinitions(): readonly Readonly<ToolDefinition>[] {
+    return this.toolRegistry.listDefinitions();
   }
 
   createConversationEngine(options?: {

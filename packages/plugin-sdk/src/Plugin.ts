@@ -1,5 +1,8 @@
 import type { Logger } from "@agentforge/logger";
-import type { LLMProviderRegistry } from "@agentforge/provider-sdk";
+import type {
+  LLMProviderRegistry,
+  ToolRegistry,
+} from "@agentforge/provider-sdk";
 import type { PluginMetadata } from "./PluginMetadata.js";
 
 export interface PluginContext {
@@ -8,6 +11,7 @@ export interface PluginContext {
   readonly configuration: unknown;
   readonly logger: Logger;
   readonly llmProviders: LLMProviderRegistry;
+  readonly tools: ToolRegistry;
 }
 
 export interface Plugin {

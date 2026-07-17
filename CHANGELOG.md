@@ -76,3 +76,7 @@
 - Immutable tool calls plus JSON-compatible success and failure results
 - Asynchronous typed tool handlers and immutable cancellation-aware execution context
 - Typed tool contract validation errors with defensive JSON snapshots
+- Immutable registered tool associations and a read-only registry contract
+- Exact, case-sensitive `AgentForge` tool registration with ordered lookup and listing
+- Stable read-only tool registry access through `PluginContext`
+- Typed duplicate-tool and missing-tool registry errors
