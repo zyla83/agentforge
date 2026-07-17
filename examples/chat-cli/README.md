@@ -1,7 +1,8 @@
 # AgentForge Interactive Chat CLI
 
-This example connects AgentForge to a local Ollama server and maintains an
-in-memory immutable conversation while streaming assistant responses.
+This example connects AgentForge to a local Ollama server, streams assistant
+responses, and persists immutable conversations with
+`@agentforge/storage-filesystem`.
 
 ## Requirements
 
@@ -18,6 +19,9 @@ pnpm install
 pnpm example:chat
 ```
 
+Each process starts and saves a new conversation. The CLI never resumes the
+latest conversation automatically; use `/list` and `/load` to resume one.
+
 ## Environment
 
 | Variable | Default |
@@ -26,36 +30,85 @@ pnpm example:chat
 | `OLLAMA_MODEL` | `llama3.1:8b` |
 | `AGENTFORGE_SYSTEM_PROMPT` | `You are a helpful, clear, and concise local AI assistant.` |
 | `AGENTFORGE_REQUEST_TIMEOUT_MS` | `120000` |
+| `AGENTFORGE_CHAT_DATA_DIR` | `.agentforge/chat` relative to the current working directory |
 
-The system prompt becomes an immutable agent profile instruction and is not
-stored in conversation history.
+Relative data-directory overrides are resolved from the current working
+directory. The system prompt becomes an immutable agent profile instruction and
+is not stored in conversation history.
 
 ## Commands
 
 ```text
-/help   Show available commands
-/info   Show current configuration
-/reset  Start a new conversation
-/exit   Exit the chat
+/help                       Show available commands
+/info                       Show current configuration
+/reset                      Start and save a new conversation
+/save                       Save the current conversation
+/list                       List saved conversations
+/load <conversation-id>     Load a saved conversation
+/delete <conversation-id>   Delete a saved conversation
+/export <file-path>         Export the current conversation
+/import <file-path>         Import and save a conversation
+/exit                       Exit the chat
 ```
 
-`/quit` is an alias for `/exit`. Pressing Ctrl+C during generation cancels the
-active response and retains the previous completed conversation. Pressing
-Ctrl+C at the prompt exits. EOF and SIGTERM also shut the application down
-cleanly.
+`/quit` is an alias for `/exit`. Quote IDs or paths that contain spaces with
+single or double quotes. File paths are resolved from the current working
+directory without shell, environment-variable, or home-directory expansion.
+
+Successful turns are saved before their completed conversation becomes active.
+An explicit `/save` creates a new revision even when nothing changed. `/reset`
+creates a separate stored conversation and does not delete earlier history.
+`/load` is read-only and does not increment the stored revision. Deleting the
+active conversation leaves it in memory as unsaved; the next save recreates it
+at revision 1.
+
+## Import and export
+
+`/export` atomically writes a pretty V1 `agentforge.conversation` JSON document.
+It does not include store revision metadata. `/import` accepts the same plain V1
+format, validates it with core serialization, saves it, and then makes it
+active. Importing an ID that already exists explicitly replaces its stored
+snapshot at the next revision. Store-managed files use the distinct V1
+`agentforge.conversation-store-entry` envelope and are not valid import files.
+
+Example session:
+
+```text
+You: Explain durable conversations.
+Assistant: ...
+You: /save
+Conversation saved.
+ID: 5ab7...
+Revision: 3
+You: /export "./exports/my conversation.json"
+You: /reset
+You: /import "./exports/my conversation.json"
+```
+
+## Cancellation and persistence failures
+
+Pressing Ctrl+C during generation cancels the active response and does not save
+partial output. Ctrl+C at the prompt exits. EOF and SIGTERM also shut down
+cleanly without an extra save.
+
+If generation completes but saving fails, the displayed response is not added
+to subsequent context: the previous persisted conversation remains active.
+Durability takes precedence over an unpersisted in-memory state. Failed,
+cancelled, reset, load, and import operations preserve the current conversation.
 
 ## Architecture
 
-The application owns the current conversation snapshot and terminal lifecycle.
-AgentForge provides provider registration, the immutable profile, conversation
-execution, streaming, and cancellation. Terminal behavior remains outside core.
+The application owns the active conversation, revision, persistence commands,
+and terminal lifecycle. AgentForge provides provider registration, the immutable
+profile, conversation execution, streaming, and cancellation. The core engine
+does not save automatically.
 
 ## Known limitations
 
 - Ollama only
 - Text only
-- No persistence
+- No automatic resume
+- No cross-process write coordination
 - No tool calling
 - No Markdown rendering
-- No transcript export
 - No model switching during a session

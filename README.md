@@ -38,9 +38,10 @@ shutdown.
 
 ## Interactive chat CLI
 
-The interactive example requires a local Ollama installation and keeps its
-conversation in memory only. Closing the CLI discards the conversation. The
-system prompt comes from an immutable agent profile.
+The interactive example requires a local Ollama installation and demonstrates
+durable filesystem-backed conversations, successful-turn persistence,
+load/list/delete commands, and versioned conversation import/export. The system
+prompt comes from an immutable agent profile.
 
 ```bash
 ollama serve
@@ -61,8 +62,10 @@ $env:OLLAMA_MODEL = "qwen2.5:7b"
 pnpm example:chat
 ```
 
-Available commands are `/help`, `/info`, `/reset`, and `/exit`. Ctrl+C during
-generation cancels the active response; Ctrl+C at the prompt exits the CLI.
+The CLI saves data under `.agentforge/chat` by default. See the
+[chat CLI README](examples/chat-cli/README.md) for its commands, data-directory
+override, persistence semantics, and import/export format. Ctrl+C during
+generation cancels the active response without saving partial output.
 
 ## Workspace
 

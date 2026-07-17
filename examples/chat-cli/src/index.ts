@@ -7,6 +7,7 @@ import {
 import { OllamaLLMProvider } from "@agentforge/provider-ollama";
 import { ProviderHealthStatus } from "@agentforge/provider-sdk";
 import type { ProviderHealth } from "@agentforge/provider-sdk";
+import { createFilesystemConversationStore } from "@agentforge/storage-filesystem";
 import { ChatApplication } from "./ChatApplication.js";
 import { createChatProfile } from "./createChatProfile.js";
 import { loadChatEnvironment } from "./environment.js";
@@ -30,11 +31,17 @@ async function main(): Promise<void> {
 
     const profile = createChatProfile(environment, provider.metadata.name);
     const engine = agent.createConversationEngine({ profile });
+    const store = createFilesystemConversationStore({
+      directory: environment.dataDirectory,
+    });
+    const initialEntry = await store.save(createConversation());
     const application = new ChatApplication({
       agent,
       engine,
       profile,
-      initialConversation: createConversation(),
+      store,
+      initialEntry,
+      dataDirectory: environment.dataDirectory,
       timeoutMs: environment.timeoutMs,
       input: process.stdin,
       output: process.stdout,

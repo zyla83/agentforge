@@ -10,7 +10,8 @@
   "dependencies": {
     "@agentforge/core": "workspace:*",
     "@agentforge/provider-ollama": "workspace:*",
-    "@agentforge/provider-sdk": "workspace:*"
+    "@agentforge/provider-sdk": "workspace:*",
+    "@agentforge/storage-filesystem": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "22.15.30",

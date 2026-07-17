@@ -11,6 +11,7 @@
   "references": [
     { "path": "../../packages/core" },
     { "path": "../../packages/provider-ollama" },
-    { "path": "../../packages/provider-sdk" }
+    { "path": "../../packages/provider-sdk" },
+    { "path": "../../packages/storage-filesystem" }
   ]
 }

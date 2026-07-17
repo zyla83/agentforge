@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import process from "node:process";
 
 const DEFAULT_BASE_URL = "http://localhost:11434";
@@ -5,16 +6,19 @@ const DEFAULT_MODEL = "llama3.1:8b";
 const DEFAULT_SYSTEM_PROMPT =
   "You are a helpful, clear, and concise local AI assistant.";
 const DEFAULT_TIMEOUT_MS = 120_000;
+const DEFAULT_DATA_DIRECTORY = ".agentforge/chat";
 
 export interface ChatEnvironment {
   readonly baseUrl: string;
   readonly model: string;
   readonly systemPrompt: string;
   readonly timeoutMs: number;
+  readonly dataDirectory: string;
 }
 
 export function loadChatEnvironment(
   environment: NodeJS.ProcessEnv = process.env,
+  currentWorkingDirectory: string = process.cwd(),
 ): Readonly<ChatEnvironment> {
   const baseUrl = readString(environment, "OLLAMA_BASE_URL", DEFAULT_BASE_URL);
   const model = readString(environment, "OLLAMA_MODEL", DEFAULT_MODEL);
@@ -24,8 +28,28 @@ export function loadChatEnvironment(
     DEFAULT_SYSTEM_PROMPT,
   );
   const timeoutMs = readTimeout(environment);
+  const dataDirectory = resolve(
+    currentWorkingDirectory,
+    readDataDirectory(environment),
+  );
 
-  return Object.freeze({ baseUrl, model, systemPrompt, timeoutMs });
+  return Object.freeze({
+    baseUrl,
+    model,
+    systemPrompt,
+    timeoutMs,
+    dataDirectory,
+  });
+}
+
+function readDataDirectory(environment: NodeJS.ProcessEnv): string {
+  const value = environment.AGENTFORGE_CHAT_DATA_DIR;
+  if (value === undefined) return DEFAULT_DATA_DIRECTORY;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    throw new Error("AGENTFORGE_CHAT_DATA_DIR must be a non-empty string.");
+  }
+  return trimmed;
 }
 
 function readString(

@@ -68,3 +68,7 @@
 - Node.js filesystem conversation-store adapter with restart persistence
 - Atomic versioned store-entry files using safe Base64URL conversation filenames
 - Deterministic filesystem pagination with typed corruption, initialization, and I/O errors
+- Durable filesystem-backed conversations in the interactive chat CLI
+- Automatic persistence after successful chat turns with transactional in-memory state adoption
+- Explicit chat save, list, load, and delete commands
+- V1 conversation-document import and atomic export commands

@@ -1,6 +1,7 @@
 import process from "node:process";
 import type { Interface } from "node:readline/promises";
 import {
+  ConversationStoreOrder,
   ConversationTurnAbortedError,
   createConversation,
   createConversationTurnController,
@@ -9,31 +10,45 @@ import type {
   AgentProfile,
   Conversation,
   ConversationEngine,
+  ConversationStore,
   ConversationTurnController,
 } from "@agentforge/core";
 import { ProviderAbortError } from "@agentforge/provider-sdk";
 import type { ChatApplicationOptions } from "./ChatApplicationOptions.js";
 import { ChatCommandType } from "./ChatCommand.js";
 import type { ChatCommand } from "./ChatCommand.js";
+import { formatConversationList } from "./commands/formatConversationList.js";
 import { createReadlineInterface } from "./createReadlineInterface.js";
+import { readImportedConversation } from "./files/readImportedConversation.js";
+import { writeExportedConversation } from "./files/writeExportedConversation.js";
 import { formatChatError } from "./formatChatError.js";
 import { parseChatCommand } from "./parseChatCommand.js";
 
 const HELP_TEXT = `Commands:
-  /help   Show available commands
-  /info   Show current configuration
-  /reset  Start a new conversation
-  /exit   Exit the chat
+  /help                       Show available commands
+  /info                       Show current configuration
+  /reset                      Start and save a new conversation
+  /save                       Save the current conversation
+  /list                       List saved conversations
+  /load <conversation-id>     Load a saved conversation
+  /delete <conversation-id>   Delete a saved conversation
+  /export <file-path>         Export the current conversation
+  /import <file-path>         Import and save a conversation
+  /exit                       Exit the chat
+  /quit                       Exit the chat
 `;
 
 export class ChatApplication {
   private readonly engine: ConversationEngine;
   private readonly profile: AgentProfile;
+  private readonly store: ConversationStore;
+  private readonly dataDirectory: string;
   private readonly timeoutMs: number;
   private readonly input: NodeJS.ReadableStream;
   private readonly output: NodeJS.WritableStream;
   private readonly errorOutput: NodeJS.WritableStream;
   private conversation: Conversation;
+  private currentRevision: number | undefined;
   private activeController: ConversationTurnController | undefined;
   private promptController: AbortController | undefined;
   private readline: Interface | undefined;
@@ -43,7 +58,10 @@ export class ChatApplication {
   constructor(options: ChatApplicationOptions) {
     this.engine = options.engine;
     this.profile = options.profile;
-    this.conversation = options.initialConversation;
+    this.store = options.store;
+    this.conversation = options.initialEntry.conversation;
+    this.currentRevision = options.initialEntry.revision;
+    this.dataDirectory = options.dataDirectory;
     this.timeoutMs = options.timeoutMs;
     this.input = options.input;
     this.output = options.output;
@@ -79,9 +97,14 @@ export class ChatApplication {
           }
         }
 
-        const command = parseChatCommand(line);
-        if (command !== undefined) {
-          this.handleCommand(command);
+        try {
+          const command = parseChatCommand(line);
+          if (command !== undefined) {
+            await this.handleCommand(command);
+            continue;
+          }
+        } catch (error) {
+          this.errorOutput.write(`${formatChatError(error)}\n`);
           continue;
         }
         if (line.trim().length === 0) continue;
@@ -128,24 +151,123 @@ export class ChatApplication {
     this.closeReadline();
   }
 
-  private handleCommand(command: Readonly<ChatCommand>): void {
+  private async handleCommand(command: Readonly<ChatCommand>): Promise<void> {
     switch (command.type) {
       case ChatCommandType.Exit:
         this.requestExit(new Error("Chat exit requested"));
-        break;
+        return;
       case ChatCommandType.Reset:
-        this.conversation = createConversation();
-        this.output.write("Conversation reset.\n");
-        break;
+        await this.resetConversation();
+        return;
       case ChatCommandType.Help:
         this.output.write(HELP_TEXT);
-        break;
+        return;
       case ChatCommandType.Info:
-        this.output.write(
-          `Profile: ${this.profile.id}\nProvider: ${this.profile.provider ?? "default"}\nModel: ${this.profile.model ?? "unspecified"}\nMessages: ${this.conversation.messages.length}\n`,
-        );
-        break;
+        this.printInfo();
+        return;
+      case ChatCommandType.Save:
+        await this.saveConversation();
+        return;
+      case ChatCommandType.List:
+        await this.listConversations();
+        return;
+      case ChatCommandType.Load:
+        await this.loadConversation(command.conversationId);
+        return;
+      case ChatCommandType.Delete:
+        await this.deleteConversation(command.conversationId);
+        return;
+      case ChatCommandType.Export:
+        await this.exportConversation(command.filePath);
+        return;
+      case ChatCommandType.Import:
+        await this.importConversation(command.filePath);
     }
+  }
+
+  private async saveConversation(): Promise<void> {
+    const entry = await this.store.save(this.conversation);
+    this.currentRevision = entry.revision;
+    this.output.write(
+      `Conversation saved.\nID: ${entry.conversation.id}\nRevision: ${entry.revision}\n`,
+    );
+  }
+
+  private async resetConversation(): Promise<void> {
+    const entry = await this.store.save(createConversation());
+    this.conversation = entry.conversation;
+    this.currentRevision = entry.revision;
+    this.output.write(
+      `Conversation reset.\nID: ${entry.conversation.id}\nRevision: ${entry.revision}\n`,
+    );
+  }
+
+  private async listConversations(): Promise<void> {
+    const result = await this.store.list({
+      limit: 100,
+      order: ConversationStoreOrder.UpdatedDescending,
+    });
+    this.output.write(
+      formatConversationList(
+        result.entries,
+        this.conversation.id,
+        result.nextCursor !== undefined,
+      ),
+    );
+  }
+
+  private async loadConversation(conversationId: string): Promise<void> {
+    const entry = await this.store.require(conversationId);
+    this.conversation = entry.conversation;
+    this.currentRevision = entry.revision;
+    this.output.write(
+      `Conversation loaded.\nID: ${entry.conversation.id}\nMessages: ${entry.conversation.messages.length}\nRevision: ${entry.revision}\nUpdated: ${entry.conversation.updatedAt}\n`,
+    );
+  }
+
+  private async deleteConversation(conversationId: string): Promise<void> {
+    const existed = await this.store.delete(conversationId);
+    this.output.write(
+      existed
+        ? `Conversation deleted: ${conversationId}\n`
+        : `Conversation not found: ${conversationId}\n`,
+    );
+    if (existed && conversationId === this.conversation.id) {
+      this.currentRevision = undefined;
+      this.output.write(
+        "The active conversation remains in memory and is now unsaved.\n",
+      );
+    }
+  }
+
+  private async exportConversation(filePath: string): Promise<void> {
+    const resolvedPath = await writeExportedConversation(
+      filePath,
+      this.conversation,
+    );
+    this.output.write(`Conversation exported to:\n${resolvedPath}\n`);
+  }
+
+  private async importConversation(filePath: string): Promise<void> {
+    const imported = await readImportedConversation(filePath);
+    const existing = await this.store.get(imported.conversation.id);
+    const entry = await this.store.save(imported.conversation);
+    this.conversation = entry.conversation;
+    this.currentRevision = entry.revision;
+    this.output.write(
+      `Conversation imported.\nID: ${entry.conversation.id}\nMessages: ${entry.conversation.messages.length}\nRevision: ${entry.revision}\nSource: ${imported.filePath}\n`,
+    );
+    if (existing !== undefined) {
+      this.output.write(
+        `Existing stored conversation replaced at revision ${entry.revision}.\n`,
+      );
+    }
+  }
+
+  private printInfo(): void {
+    this.output.write(
+      `Profile: ${this.profile.id}\nProvider: ${this.profile.provider ?? "default"}\nModel: ${this.profile.model ?? "unspecified"}\nConversation ID: ${this.conversation.id}\nMessages: ${this.conversation.messages.length}\nRevision: ${this.currentRevision ?? "unsaved"}\nData directory: ${this.dataDirectory}\n`,
+    );
   }
 
   private async executeTurn(content: string): Promise<void> {
@@ -189,7 +311,17 @@ export class ChatApplication {
       }
       if (this.assistantLineOpen) this.output.write("\n");
       this.assistantLineOpen = false;
-      this.conversation = completedConversation;
+
+      try {
+        const entry = await this.store.save(completedConversation);
+        this.conversation = entry.conversation;
+        this.currentRevision = entry.revision;
+      } catch (error) {
+        this.errorOutput.write(
+          "The response was generated but could not be persisted. The previous conversation remains active.\n",
+        );
+        this.errorOutput.write(`${formatChatError(error)}\n`);
+      }
     } catch (error) {
       if (this.assistantLineOpen) this.output.write("\n");
       this.assistantLineOpen = false;

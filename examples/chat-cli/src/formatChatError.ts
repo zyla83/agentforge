@@ -1,16 +1,34 @@
 import {
+  ConversationNotFoundError,
   ConversationProviderNotFoundError,
   ConversationProviderStreamingUnsupportedError,
+  ConversationSerializationError,
+  ConversationStoreError,
   ConversationTurnAbortedError,
   InvalidAgentProfileError,
   InvalidConversationTurnError,
 } from "@agentforge/core";
 import { ProviderAbortError, ProviderError } from "@agentforge/provider-sdk";
+import { FilesystemConversationStoreError } from "@agentforge/storage-filesystem";
+import { ChatCommandParseError } from "./ChatCommandParseError.js";
+import { ChatFileOperationError } from "./files/ChatFileOperationError.js";
 
 export function formatChatError(error: unknown): string {
   try {
     if (error instanceof ConversationTurnAbortedError) {
       return `Conversation cancelled during ${error.phase}.`;
+    }
+    if (error instanceof ChatCommandParseError) return error.message;
+    if (error instanceof ChatFileOperationError) return error.message;
+    if (error instanceof ConversationNotFoundError) return error.message;
+    if (error instanceof FilesystemConversationStoreError) {
+      return `Conversation storage failed: ${error.message}`;
+    }
+    if (error instanceof ConversationStoreError) {
+      return `Conversation storage failed: ${error.message}`;
+    }
+    if (error instanceof ConversationSerializationError) {
+      return `Conversation document is invalid: ${error.message}`;
     }
     if (error instanceof ConversationProviderNotFoundError) {
       return "The configured provider is not registered.";

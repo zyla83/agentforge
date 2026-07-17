@@ -5,6 +5,7 @@ import {
   appendConversationMessage,
   createAgentProfile,
   createConversation,
+  createInMemoryConversationStore,
 } from "@agentforge/core";
 import type {
   ConversationEngine,
@@ -173,11 +174,22 @@ function createApplication(
     model: "model",
     provider: "ollama",
   });
+  const initialConversation = createConversation();
+  const initialEntry = {
+    conversation: initialConversation,
+    savedAt: initialConversation.createdAt,
+    revision: 1,
+  };
+  const store = createInMemoryConversationStore({
+    initialEntries: [initialEntry],
+  });
   return new ChatApplication({
     agent: new AgentForge(),
     engine,
     profile,
-    initialConversation: createConversation(),
+    store,
+    initialEntry,
+    dataDirectory: "C:\\test-data",
     timeoutMs: 1_000,
     input,
     output,
@@ -207,7 +219,7 @@ describe("ChatApplication", () => {
     input.write("Second question\n");
     await output.waitFor("Assistant: Answer 2\nYou: ");
     input.write("/info\n");
-    await output.waitFor("Messages: 4\nYou: ");
+    await output.waitFor("Data directory: C:\\test-data\nYou: ");
     input.write("/exit\n");
     await running;
 
@@ -242,7 +254,7 @@ describe("ChatApplication", () => {
     input.write("Question\n");
     await output.waitFor("Assistant: Complete response\nYou: ");
     input.write("/info\n");
-    await output.waitFor("Messages: 2\nYou: ");
+    await output.waitFor("Data directory: C:\\test-data\nYou: ");
     input.write("/exit\n");
     await running;
 
@@ -314,15 +326,15 @@ describe("ChatApplication", () => {
     await output.waitFor("Assistant: ");
     await output.waitFor("You: ", 2);
     input.write("/info\n");
-    await output.waitFor("Messages: 2\nYou: ");
+    await output.waitFor("Data directory: C:\\test-data\nYou: ");
     input.write("/exit\n");
     await running;
 
     expect(output.read()).not.toContain("undefined");
     expect(output.read()).not.toContain("null");
     expect(output.read()).toContain("Assistant: \nYou: ");
-    expect(output.read()).toContain("Messages: 2");
-    expect(errors.read()).toBe("");
+    expect(output.read()).toContain("Messages: 0");
+    expect(errors.read()).toContain("could not be persisted");
   });
 
   it("handles help, info, reset, blank input, and exit without a turn", async () => {
@@ -342,18 +354,20 @@ describe("ChatApplication", () => {
     input.write("\n");
     await output.waitFor("You: ", 2);
     input.write("/help\n");
-    await output.waitFor("/exit   Exit the chat\nYou: ");
+    await output.waitFor("/quit                       Exit the chat\nYou: ");
     input.write("/info\n");
-    await output.waitFor("Messages: 0\nYou: ");
+    await output.waitFor("Data directory: C:\\test-data\nYou: ");
     input.write("/reset\n");
-    await output.waitFor("Conversation reset.\nYou: ");
+    await output.waitFor("Revision: 1\nYou: ");
     input.write("/info\n");
-    await output.waitFor("Messages: 0", 2);
+    await output.waitFor("You: ", 6);
     input.write("/quit\n");
     await running;
 
     expect(inputs).toHaveLength(0);
-    expect(output.read()).toContain("/help   Show available commands");
+    expect(output.read()).toContain(
+      "/help                       Show available commands",
+    );
     expect(output.read()).toContain("Conversation reset.");
     expect(output.read().match(/Messages: 0/g)).toHaveLength(2);
     expect(errors.read()).toBe("");

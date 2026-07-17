@@ -51,6 +51,9 @@ importers:
       '@agentforge/provider-sdk':
         specifier: workspace:*
         version: link:../../packages/provider-sdk
+      '@agentforge/storage-filesystem':
+        specifier: workspace:*
+        version: link:../../packages/storage-filesystem
     devDependencies:
       '@types/node':
         specifier: 22.15.30
