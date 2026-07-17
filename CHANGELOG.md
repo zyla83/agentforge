@@ -72,3 +72,7 @@
 - Automatic persistence after successful chat turns with transactional in-memory state adoption
 - Explicit chat save, list, load, and delete commands
 - V1 conversation-document import and atomic export commands
+- Provider-neutral immutable tool definitions with limited JSON Schema inputs
+- Immutable tool calls plus JSON-compatible success and failure results
+- Asynchronous typed tool handlers and immutable cancellation-aware execution context
+- Typed tool contract validation errors with defensive JSON snapshots

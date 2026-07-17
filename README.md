@@ -159,6 +159,54 @@ class ExampleProvider implements Provider {
 
 Provider registration in `AgentForge` is not yet implemented.
 
+## Tool contracts
+
+`@agentforge/provider-sdk` defines provider-neutral, immutable contracts for
+tool definitions, calls, results, asynchronous handlers, and execution context.
+Definitions contain data only; executable handlers remain separate and are not
+registered or invoked automatically in this release.
+
+```ts
+import {
+  createToolDefinition,
+  type ToolHandler,
+} from "@agentforge/provider-sdk";
+
+const definition = createToolDefinition({
+  name: "current_time",
+  description: "Return the current time for a UTC offset.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      utcOffset: {
+        type: "string",
+        description: "UTC offset such as +02:00.",
+      },
+    },
+    required: ["utcOffset"],
+    additionalProperties: false,
+  },
+});
+
+const handler: ToolHandler = async (argumentsValue, context) => {
+  if (context.signal?.aborted) throw context.signal.reason;
+  return { utcOffset: argumentsValue.utcOffset };
+};
+```
+
+Arguments, metadata, outputs, and failure details accept deeply immutable JSON
+values only. Tool inputs use a deliberately limited JSON Schema subset:
+`object`, `array`, `string`, `number`, `integer`, `boolean`, and `null` types;
+primitive `enum` and `const`; object `properties`, `required`, and
+`additionalProperties`; array `items` and length limits; string length limits;
+and numeric minimum/maximum limits. References, schema composition, patterns,
+formats, conditionals, tuple schemas, and recursive schemas are not supported.
+
+Tool registration, argument validation against a registered definition, handler
+execution, retries, timeouts, and provider wire-format mapping are intentionally
+deferred to later tasks. Existing LLM request, response, conversation, and
+serialization contracts do not carry tool data yet.
+
 ## Conversation model
 
 The core conversation model represents history as immutable snapshots. Appending

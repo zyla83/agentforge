@@ -15,3 +15,4 @@ export type { ProviderRequestOptions } from "./ProviderRequestOptions.js";
 export * from "./errors/index.js";
 export * from "./llm/index.js";
 export * from "./registry/index.js";
+export * from "./tools/index.js";
