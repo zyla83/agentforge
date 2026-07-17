@@ -3,6 +3,7 @@ import {
   AgentForgeState,
   type Conversation,
   type ConversationTurnResult,
+  type ToolExecutionObserverEvent,
   createConversation,
 } from "@agentforge/core";
 import { registerExampleTools } from "@agentforge/example-tools";
@@ -13,6 +14,7 @@ export interface ToolExecutionExampleResult {
   readonly startingConversation: Readonly<Conversation>;
   readonly turn: Readonly<ConversationTurnResult>;
   readonly requests: readonly LLMGenerationRequest[];
+  readonly observedEvents: readonly Readonly<ToolExecutionObserverEvent>[];
 }
 
 export async function runToolExecutionExample(
@@ -26,12 +28,20 @@ export async function runToolExecutionExample(
 
   try {
     let nextId = 1;
+    const observedEvents: ToolExecutionObserverEvent[] = [];
     const engine = agent.createConversationEngine({
       conversationFactory: {
         idGenerator: () => `tool-example-message-${nextId++}`,
         now: () => new Date("2026-01-01T00:00:00.000Z"),
       },
       toolExecution: { enabled: true },
+      observability: {
+        clock: {
+          now: () => new Date("2026-01-01T00:00:00.000Z"),
+          monotonicNow: () => 0,
+        },
+        toolExecution: (event) => observedEvents.push(event),
+      },
     });
     const startingConversation = createConversation({
       id: "tool-example-conversation",
@@ -57,11 +67,19 @@ export async function runToolExecutionExample(
           : execution.result.error.message
       }`,
     );
+    for (const event of observedEvents) {
+      writeLine(
+        event.type === "tool-execution-started"
+          ? `Observed event: ${event.type} ${event.context.toolName} ${event.context.turnId} round=${event.context.providerRound} execution=${event.context.executionIndex}`
+          : `Observed event: ${event.type} ${event.context.toolName} status=${event.result.status}`,
+      );
+    }
 
     return Object.freeze({
       startingConversation,
       turn,
       requests: Object.freeze([...provider.requests]),
+      observedEvents: Object.freeze([...observedEvents]),
     });
   } finally {
     if (agent.getState() === AgentForgeState.Running) await agent.stop();

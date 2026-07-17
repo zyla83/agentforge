@@ -302,6 +302,42 @@ import {
 agent.registerTool(calculatorToolDefinition, calculatorToolHandler);
 ```
 
+## Tool execution observability
+
+Tool execution observers are opt-in diagnostics for both `runTurn()` and
+`streamTurn()`. They receive immutable start and completion events with the
+conversation ID, engine-scoped turn ID, one-based provider round, one-based
+turn-wide execution index, call ID, and tool name.
+
+```ts
+import type { ToolExecutionObserverEvent } from "@agentforge/core";
+
+const events: ToolExecutionObserverEvent[] = [];
+
+const engine = agent.createConversationEngine({
+  toolExecution: { enabled: true },
+  observability: {
+    toolExecution: (event) => {
+      events.push(event);
+    },
+  },
+});
+```
+
+Completion events and runtime execution records include ISO timestamps and a
+finite non-negative `durationMs`. Duration measures executor work, including
+resolution, validation, handler execution, and result normalization, while
+excluding observer callback execution. Observers run synchronously in configured
+order; their return values are ignored, promises are not awaited, and thrown
+errors are isolated so they cannot alter the tool result or conversation turn.
+
+Events expose canonical tool calls and results, so arguments and outputs may
+contain sensitive information. Applications must not forward them to logs
+without an appropriate data policy. Redaction is deferred to Task-034.
+Observability events and execution timing are runtime-only and are not persisted
+in conversations. Existing `tool-call-started` and `tool-call-completed` stream
+events remain separate for user-interface rendering.
+
 The framework validates arguments from each definition's JSON Schema before
 calling its handler. Schema validation does not inject defaults, so
 `format_text` applies its own separator and trimming defaults. Ordinary handler

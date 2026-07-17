@@ -274,6 +274,7 @@ export class AgentForge {
     readonly profile?: AgentProfile;
     readonly signal?: AbortSignal;
     readonly toolExecution?: ConversationEngineOptions["toolExecution"];
+    readonly observability?: ConversationEngineOptions["observability"];
   }): ConversationEngine {
     return createConversationEngineFactory({
       providers: this,
@@ -286,6 +287,9 @@ export class AgentForge {
       ...(options?.toolExecution === undefined
         ? {}
         : { toolExecution: options.toolExecution }),
+      ...(options?.observability === undefined
+        ? {}
+        : { observability: options.observability }),
     });
   }
 

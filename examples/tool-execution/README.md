@@ -8,6 +8,10 @@ two-round `ConversationEngine` turn:
 2. AgentForge validates and executes the call.
 3. The provider receives the successful result and returns the final answer.
 
+The example also configures an in-memory tool execution observer and prints
+deterministic start and completion summaries. It does not print full arguments
+or outputs through the observer.
+
 Run it without Ollama, network access, environment variables, or interactive
 input:
 

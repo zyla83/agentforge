@@ -38,7 +38,13 @@ import {
   ToolExecutorImpl,
   serializeToolResultContent,
 } from "../tools/index.js";
-import type { ToolExecutionRecord } from "../tools/index.js";
+import type {
+  ToolExecutionClock,
+  ToolExecutionObserver,
+  ToolExecutionRecord,
+} from "../tools/index.js";
+import { ToolExecutionObserverDispatcher } from "../tools/internal/ToolExecutionObserverDispatcher.js";
+import { defaultToolExecutionClock } from "../tools/internal/defaultToolExecutionClock.js";
 import type { ConversationEngineOptions } from "./ConversationEngineOptions.js";
 import type { ConversationProviderResolver } from "./ConversationProviderResolver.js";
 import type { ConversationStreamEvent } from "./ConversationStreamEvent.js";
@@ -73,6 +79,8 @@ interface ResolvedEngineOptions {
   readonly toolExecutionEnabled: boolean;
   readonly maxToolRounds: number;
   readonly toolMetadata: Readonly<Record<string, JsonValue>>;
+  readonly toolObservers: readonly ToolExecutionObserver[];
+  readonly toolClock: ToolExecutionClock;
 }
 
 interface ResolvedConversationTurn {
@@ -93,6 +101,9 @@ export class ConversationEngine {
   private readonly toolExecutionEnabled: boolean;
   private readonly maxToolRounds: number;
   private readonly toolMetadata: Readonly<Record<string, JsonValue>>;
+  private readonly toolObserverDispatcher: ToolExecutionObserverDispatcher;
+  private readonly toolClock: ToolExecutionClock;
+  private nextTurnSequence = 1;
 
   constructor(options: ConversationEngineOptions) {
     const resolved = validateEngineOptions(options);
@@ -104,6 +115,10 @@ export class ConversationEngine {
     this.toolExecutionEnabled = resolved.toolExecutionEnabled;
     this.maxToolRounds = resolved.maxToolRounds;
     this.toolMetadata = resolved.toolMetadata;
+    this.toolObserverDispatcher = new ToolExecutionObserverDispatcher(
+      resolved.toolObservers,
+    );
+    this.toolClock = resolved.toolClock;
   }
 
   async runTurn(
@@ -111,6 +126,8 @@ export class ConversationEngine {
   ): Promise<Readonly<ConversationTurnResult>> {
     const composed = composeAbortSignals([this.signal, getTurnSignal(input)]);
     try {
+      const turnId = this.allocateTurnId();
+      let nextExecutionIndex = 1;
       const prepared = this.prepareTurn(input, composed.signal);
       let conversation = prepared.withUser;
       const records: Readonly<ToolExecutionRecord>[] = [];
@@ -118,7 +135,10 @@ export class ConversationEngine {
       const executor =
         prepared.definitions === undefined
           ? undefined
-          : new ToolExecutorImpl(this.tools as ToolRegistry);
+          : new ToolExecutorImpl(this.tools as ToolRegistry, {
+              observerDispatcher: this.toolObserverDispatcher,
+              clock: this.toolClock,
+            });
 
       for (let round = 1; round <= this.maxToolRounds; round += 1) {
         throwIfConversationTurnAborted(
@@ -166,6 +186,12 @@ export class ConversationEngine {
               executor,
               call,
               composed.signal,
+              {
+                conversationId: input.conversation.id,
+                turnId,
+                providerRound: round,
+                executionIndex: nextExecutionIndex++,
+              },
             );
             records.push(record);
             throwIfConversationTurnAborted(
@@ -232,6 +258,8 @@ export class ConversationEngine {
   ): AsyncIterable<ConversationStreamEvent> {
     const composed = composeAbortSignals([this.signal, getTurnSignal(input)]);
     try {
+      const turnId = this.allocateTurnId();
+      let nextExecutionIndex = 1;
       const prepared = this.prepareTurn(input, composed.signal);
       if (!isLLMStreamingProvider(prepared.provider))
         throw new ConversationProviderStreamingUnsupportedError(
@@ -243,7 +271,10 @@ export class ConversationEngine {
       const executor =
         prepared.definitions === undefined
           ? undefined
-          : new ToolExecutorImpl(this.tools as ToolRegistry);
+          : new ToolExecutorImpl(this.tools as ToolRegistry, {
+              observerDispatcher: this.toolObserverDispatcher,
+              clock: this.toolClock,
+            });
       yield Object.freeze({
         type: "started",
         conversation,
@@ -296,6 +327,12 @@ export class ConversationEngine {
               executor,
               call,
               composed.signal,
+              {
+                conversationId: input.conversation.id,
+                turnId,
+                providerRound: round,
+                executionIndex: nextExecutionIndex++,
+              },
             );
             records.push(record);
             conversation = appendToolResult(
@@ -438,13 +475,19 @@ export class ConversationEngine {
     executor: ToolExecutorImpl,
     call: Readonly<ToolCall>,
     signal: AbortSignal | undefined,
+    correlation: {
+      readonly conversationId: string;
+      readonly turnId: string;
+      readonly providerRound: number;
+      readonly executionIndex: number;
+    },
   ): Promise<Readonly<ToolExecutionRecord>> {
     try {
-      const result = await executor.execute(call, {
+      return await executor.executeWithRecord(call, {
         ...(signal === undefined ? {} : { signal }),
         metadata: this.toolMetadata,
+        correlation,
       });
-      return Object.freeze({ call, result });
     } catch (error) {
       if (error instanceof ToolExecutionAbortedError) {
         throw new ConversationTurnAbortedError(
@@ -454,6 +497,17 @@ export class ConversationEngine {
       }
       throw error;
     }
+  }
+
+  private allocateTurnId(): string {
+    if (!Number.isSafeInteger(this.nextTurnSequence)) {
+      throw new ConversationEngineError(
+        "Conversation engine turn ID sequence is exhausted.",
+      );
+    }
+    const turnId = `turn-${this.nextTurnSequence}`;
+    this.nextTurnSequence += 1;
+    return turnId;
   }
 
   private resolveTurn(input: ConversationTurnInput): ResolvedConversationTurn {
@@ -602,6 +656,7 @@ function validateEngineOptions(
     throw engineOptionsError("signal must be an AbortSignal");
   const tools = snapshotRegistry(value.tools);
   const execution = snapshotToolExecution(value.toolExecution);
+  const observability = snapshotObservability(value.observability);
   return {
     providers: value.providers as unknown as ConversationProviderResolver,
     ...(conversationFactory === undefined ? {} : { conversationFactory }),
@@ -609,6 +664,51 @@ function validateEngineOptions(
     ...(value.signal === undefined ? {} : { signal: value.signal }),
     ...(tools === undefined ? {} : { tools }),
     ...execution,
+    ...observability,
+  };
+}
+
+function snapshotObservability(
+  value: unknown,
+): Pick<ResolvedEngineOptions, "toolObservers" | "toolClock"> {
+  if (value !== undefined && !isRecord(value)) {
+    throw engineOptionsError("observability must be an object");
+  }
+  const options = (value ?? {}) as Record<string, unknown>;
+  const configured = options.toolExecution;
+  const candidates =
+    configured === undefined
+      ? []
+      : Array.isArray(configured)
+        ? [...configured]
+        : [configured];
+  if (candidates.some((observer) => typeof observer !== "function")) {
+    throw engineOptionsError(
+      "observability.toolExecution must contain only functions",
+    );
+  }
+  const clockValue = options.clock;
+  if (
+    clockValue !== undefined &&
+    (!isRecord(clockValue) ||
+      typeof clockValue.now !== "function" ||
+      typeof clockValue.monotonicNow !== "function")
+  ) {
+    throw engineOptionsError(
+      "observability.clock must expose callable now and monotonicNow methods",
+    );
+  }
+  const clock =
+    clockValue === undefined
+      ? defaultToolExecutionClock
+      : Object.freeze({
+          now: () => (clockValue.now as () => Date).call(clockValue),
+          monotonicNow: () =>
+            (clockValue.monotonicNow as () => number).call(clockValue),
+        });
+  return {
+    toolObservers: Object.freeze(candidates as ToolExecutionObserver[]),
+    toolClock: clock,
   };
 }
 

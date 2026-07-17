@@ -99,3 +99,7 @@
 - Tool-call and structured tool-result status lines during terminal streaming
 - V2 persistence for completed tool-enabled chat conversations
 - Text-only interactive chat remains the default when tool mode is unset or `off`
+- Opt-in synchronous tool execution observers with immutable start and completion events
+- Engine-scoped turn, provider-round, execution-index, and tool-call correlation metadata
+- Monotonic tool execution duration measurement and enriched runtime execution records
+- Deterministic observer ordering with exception isolation and non-awaited return values

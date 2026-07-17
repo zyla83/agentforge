@@ -13,6 +13,22 @@ export type {
   ToolExecutor,
 } from "./tools/ToolExecutor.js";
 export { ToolExecutorImpl } from "./tools/ToolExecutorImpl.js";
+export type {
+  ConversationEngineObservabilityOptions,
+  ToolExecutionClock,
+  ToolExecutionCompletedEvent,
+  ToolExecutionCorrelation,
+  ToolExecutionEventContext,
+  ToolExecutionObserver,
+  ToolExecutionObserverEvent,
+  ToolExecutionStartedEvent,
+} from "./tools/ToolExecutionObservability.js";
+export {
+  createToolExecutionCompletedEvent,
+  createToolExecutionEventContext,
+  createToolExecutionRecord,
+  createToolExecutionStartedEvent,
+} from "./tools/toolExecutionEventFactories.js";
 export * from "./tools/errors/index.js";
 export { serializeToolResultContent } from "./tools/serializeToolResultContent.js";
 export { validateToolArguments } from "./tools/validateToolArguments.js";

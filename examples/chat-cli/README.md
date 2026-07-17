@@ -82,6 +82,10 @@ Show warehouse availability for AF-KEYBOARD-01.
 
 The model decides whether to call a tool for any prompt.
 
+The terminal status lines consume `streamTurn()` lifecycle events. They do not
+enable the separate programmatic tool execution observer API, so tool status is
+not duplicated.
+
 ## Commands
 
 ```text

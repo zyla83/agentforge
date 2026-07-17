@@ -8,7 +8,7 @@ import { runToolExecutionExample } from "../../examples/tool-execution/src/runTo
 describe("tool execution example", () => {
   it("runs a deterministic two-round calculator interaction", async () => {
     const output: string[] = [];
-    const { startingConversation, turn, requests } =
+    const { startingConversation, turn, requests, observedEvents } =
       await runToolExecutionExample((line) => output.push(line));
 
     expect(requests).toHaveLength(2);
@@ -48,11 +48,23 @@ describe("tool execution example", () => {
     expect(turn.assistantMessage.content).toBe("7 multiplied by 6 is 42.");
     expect(startingConversation.messages).toEqual([]);
     expect(Object.isFrozen(startingConversation)).toBe(true);
+    expect(observedEvents.map(({ type }) => type)).toEqual([
+      "tool-execution-started",
+      "tool-execution-completed",
+    ]);
+    expect(observedEvents[0]?.context).toMatchObject({
+      conversationId: "tool-example-conversation",
+      turnId: "turn-1",
+      providerRound: 1,
+      executionIndex: 1,
+    });
     expect(output).toEqual([
       "Assistant: 7 multiplied by 6 is 42.",
       "Provider rounds: 2",
       "Executed tool: calculator",
       'Tool result (success): {"operation":"multiply","left":7,"right":6,"result":42}',
+      "Observed event: tool-execution-started calculator turn-1 round=1 execution=1",
+      "Observed event: tool-execution-completed calculator status=success",
     ]);
   });
 

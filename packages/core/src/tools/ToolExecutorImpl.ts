@@ -13,22 +13,90 @@ import type {
   ToolRegistry,
   ToolResult,
 } from "@agentforge/provider-sdk";
+import type { ToolExecutionClock } from "./ToolExecutionObservability.js";
 import type { ToolExecutionOptions, ToolExecutor } from "./ToolExecutor.js";
+import type { ToolExecutionRecord } from "./ToolExecutor.js";
 import {
   InvalidToolArgumentsError,
   ToolExecutionAbortedError,
   ToolExecutionPhase,
 } from "./errors/index.js";
+import { ToolExecutionObserverDispatcher } from "./internal/ToolExecutionObserverDispatcher.js";
+import { defaultToolExecutionClock } from "./internal/defaultToolExecutionClock.js";
+import {
+  createToolExecutionCompletedEvent,
+  createToolExecutionEventContext,
+  createToolExecutionRecord,
+  createToolExecutionStartedEvent,
+} from "./toolExecutionEventFactories.js";
 import { validateToolArguments } from "./validateToolArguments.js";
 
+interface ToolExecutorImplOptions {
+  readonly observerDispatcher?: ToolExecutionObserverDispatcher;
+  readonly clock?: ToolExecutionClock;
+}
+
 export class ToolExecutorImpl implements ToolExecutor {
-  constructor(private readonly tools: ToolRegistry) {}
+  private readonly observerDispatcher: ToolExecutionObserverDispatcher;
+  private readonly clock: ToolExecutionClock;
+
+  constructor(
+    private readonly tools: ToolRegistry,
+    options: ToolExecutorImplOptions = {},
+  ) {
+    this.observerDispatcher =
+      options.observerDispatcher ?? new ToolExecutionObserverDispatcher([]);
+    this.clock = options.clock ?? defaultToolExecutionClock;
+  }
 
   async execute(
     call: ToolCall,
     options?: ToolExecutionOptions,
   ): Promise<Readonly<ToolResult>> {
     const snapshot = createToolCall(call);
+    return this.executeSnapshot(snapshot, options);
+  }
+
+  async executeWithRecord(
+    call: ToolCall,
+    options: ToolExecutionOptions & {
+      readonly correlation: NonNullable<ToolExecutionOptions["correlation"]>;
+    },
+  ): Promise<Readonly<ToolExecutionRecord>> {
+    const snapshot = createToolCall(call);
+    const context = createToolExecutionEventContext(
+      options.correlation,
+      snapshot,
+    );
+    const startedAt = readWallClock(this.clock);
+    if (this.observerDispatcher.enabled) {
+      this.observerDispatcher.emit(
+        createToolExecutionStartedEvent({ context, call: snapshot, startedAt }),
+      );
+    }
+    const monotonicStart = readMonotonicClock(this.clock);
+    const result = await this.executeSnapshot(snapshot, options);
+    const monotonicCompletion = readMonotonicClock(this.clock);
+    const completedAt = readWallClock(this.clock);
+    const durationMs = Math.max(0, monotonicCompletion - monotonicStart);
+    const record = createToolExecutionRecord({
+      context,
+      call: snapshot,
+      result,
+      startedAt,
+      completedAt,
+      durationMs,
+    });
+    if (this.observerDispatcher.enabled) {
+      this.observerDispatcher.emit(createToolExecutionCompletedEvent(record));
+    }
+    return record;
+  }
+
+  private async executeSnapshot(
+    snapshot: Readonly<ToolCall>,
+    options?: ToolExecutionOptions,
+  ): Promise<Readonly<ToolResult>> {
     throwIfAborted(options?.signal, ToolExecutionPhase.Resolution);
     let registered: Readonly<RegisteredTool>;
     try {
@@ -60,7 +128,12 @@ export class ToolExecutorImpl implements ToolExecutor {
       throw error;
     }
     throwIfAborted(options?.signal, ToolExecutionPhase.Execution);
-    const context = createToolExecutionContext(options);
+    const context = createToolExecutionContext({
+      ...(options?.signal === undefined ? {} : { signal: options.signal }),
+      ...(options?.metadata === undefined
+        ? {}
+        : { metadata: options.metadata }),
+    });
     let output: unknown;
     try {
       output = await registered.handler(argumentsValue, context);
@@ -81,6 +154,22 @@ export class ToolExecutorImpl implements ToolExecutor {
       });
     }
   }
+}
+
+function readWallClock(clock: ToolExecutionClock): string {
+  const value = clock.now();
+  if (!(value instanceof Date) || !Number.isFinite(value.getTime())) {
+    throw new TypeError("Tool execution clock returned an invalid date.");
+  }
+  return value.toISOString();
+}
+
+function readMonotonicClock(clock: ToolExecutionClock): number {
+  const value = clock.monotonicNow();
+  if (!Number.isFinite(value)) {
+    throw new TypeError("Tool execution clock returned a non-finite value.");
+  }
+  return value;
 }
 
 function throwIfAborted(
