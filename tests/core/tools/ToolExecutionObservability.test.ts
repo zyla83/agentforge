@@ -11,6 +11,7 @@ import type {
   ToolExecutionClock,
   ToolExecutionObserver,
   ToolExecutionObserverEvent,
+  ToolExecutionRedactor,
 } from "@agentforge/core";
 import {
   LLMFinishReason,
@@ -28,7 +29,7 @@ import type {
   LLMStreamingProvider,
   ToolCall,
 } from "@agentforge/provider-sdk";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const toolDefinition = {
   name: "calculator",
@@ -614,7 +615,180 @@ describe("tool execution observer redaction", () => {
       expect(laterEvents[1]).toBe(events[1]);
     },
   );
+
+  it("consumes rejected argument redactor promises and hostile thenables", async () => {
+    const cases: readonly [
+      string,
+      () => ToolExecutionRedactor["redactArguments"],
+    ][] = [
+      [
+        "rejected Promise",
+        () => () => Promise.reject(new Error("redaction failed")) as never,
+      ],
+      [
+        "async rejection",
+        () => async () => {
+          throw new Error("redaction failed");
+        },
+      ],
+      [
+        "resolved Promise",
+        () => () => Promise.resolve({ value: "redacted" }) as never,
+      ],
+      ["custom rejecting thenable", () => () => createRejectingThenable()],
+      ["throwing then implementation", () => () => createThrowingThenable()],
+      ["throwing then getter", () => () => createThrowingThenGetter()],
+    ];
+
+    for (const [label, createRedactor] of cases) {
+      const { unhandled, execution } = await captureUnhandledRejections(() =>
+        runUnsupportedRedactor({
+          redactArguments: createRedactor(),
+        }),
+      );
+      expect(unhandled, label).toEqual([]);
+      expect(execution.handlerCalls, label).toBe(1);
+      expect(execution.events, label).toHaveLength(2);
+      expect(execution.events[0]?.call.arguments, label).toEqual({});
+      expect(execution.events[1]?.call.arguments, label).toEqual({});
+      expect(execution.laterEvents[0], label).toBe(execution.events[0]);
+      expect(execution.laterEvents[1], label).toBe(execution.events[1]);
+      expectUnredactedExecution(execution.result, label);
+    }
+  });
+
+  it("consumes rejected result redactor promises", async () => {
+    const cases: readonly [
+      string,
+      () => ToolExecutionRedactor["redactResult"],
+    ][] = [
+      [
+        "rejected Promise",
+        () => () => Promise.reject(new Error("redaction failed")) as never,
+      ],
+      [
+        "async rejection",
+        () => async () => {
+          throw new Error("redaction failed");
+        },
+      ],
+      ["custom rejecting thenable", () => () => createRejectingThenable()],
+    ];
+
+    for (const [label, createRedactor] of cases) {
+      const { unhandled, execution } = await captureUnhandledRejections(() =>
+        runUnsupportedRedactor({ redactResult: createRedactor() }),
+      );
+      expect(unhandled, label).toEqual([]);
+      expect(execution.handlerCalls, label).toBe(1);
+      expect(execution.events, label).toHaveLength(2);
+      expect(execution.events[1], label).toMatchObject({
+        result: { status: "success", output: null },
+      });
+      expect(execution.laterEvents[1], label).toBe(execution.events[1]);
+      expectUnredactedExecution(execution.result, label);
+    }
+  });
 });
+
+async function runUnsupportedRedactor(
+  redactor: Readonly<ToolExecutionRedactor>,
+) {
+  const events: ToolExecutionObserverEvent[] = [];
+  const laterEvents: ToolExecutionObserverEvent[] = [];
+  let handlerCalls = 0;
+  const provider = new QueueProvider([
+    toolResponse(call("call-1", "calculator", { value: 1 })),
+    textResponse("Done"),
+  ]);
+  const agent = createAgent(provider, async () => {
+    handlerCalls += 1;
+    return { secret: "output" };
+  });
+  const result = await agent
+    .createConversationEngine({
+      toolExecution: { enabled: true },
+      observability: {
+        toolExecution: [
+          (event) => events.push(event),
+          (event) => laterEvents.push(event),
+        ],
+        redactor,
+      },
+    })
+    .runTurn(turn());
+  return { events, laterEvents, handlerCalls, result };
+}
+
+async function captureUnhandledRejections<T>(
+  action: () => Promise<T>,
+): Promise<{ readonly unhandled: readonly unknown[]; readonly execution: T }> {
+  const unhandled: unknown[] = [];
+  const listener = (reason: unknown) => unhandled.push(reason);
+  const consoleSpies = [
+    vi.spyOn(console, "log").mockImplementation(() => undefined),
+    vi.spyOn(console, "warn").mockImplementation(() => undefined),
+    vi.spyOn(console, "error").mockImplementation(() => undefined),
+  ];
+  process.on("unhandledRejection", listener);
+  try {
+    const execution = await action();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(consoleSpies.every(({ mock }) => mock.calls.length === 0)).toBe(
+      true,
+    );
+    return { unhandled, execution };
+  } finally {
+    process.off("unhandledRejection", listener);
+    for (const spy of consoleSpies) spy.mockRestore();
+  }
+}
+
+function expectUnredactedExecution(
+  result: Awaited<ReturnType<typeof runUnsupportedRedactor>>["result"],
+  label: string,
+): void {
+  expect(result.toolExecutions[0]?.call.arguments, label).toEqual({ value: 1 });
+  expect(result.toolExecutions[0]?.result, label).toMatchObject({
+    status: "success",
+    output: { secret: "output" },
+  });
+  expect(
+    result.conversation.messages.find(
+      ({ role }) => role === LLMMessageRole.Tool,
+    ),
+    label,
+  ).toMatchObject({
+    result: { status: "success", output: { secret: "output" } },
+  });
+}
+
+function createRejectingThenable(): never {
+  return {
+    // biome-ignore lint/suspicious/noThenProperty: this hostile thenable is required for rejection regression coverage
+    then(_resolve: unknown, reject: (reason: unknown) => void) {
+      queueMicrotask(() => reject(new Error("redaction failed")));
+    },
+  } as never;
+}
+
+function createThrowingThenable(): never {
+  return {
+    // biome-ignore lint/suspicious/noThenProperty: this hostile thenable is required for isolation regression coverage
+    then() {
+      throw new Error("then failed");
+    },
+  } as never;
+}
+
+function createThrowingThenGetter(): never {
+  // biome-ignore lint/suspicious/noThenProperty: this hostile getter is required for isolation regression coverage
+  return Object.defineProperty({}, "then", {
+    get() {
+      throw new Error("getter failed");
+    },
+  }) as never;
+}
 
 class ControlledClock implements ToolExecutionClock {
   private elapsed = 0;

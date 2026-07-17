@@ -52,7 +52,9 @@ export class ToolExecutionEventRedactor {
         call.arguments,
         context,
       );
-      if (isThenable(value)) throw new TypeError("Async redaction is invalid.");
+      if (rejectAsyncRedaction(value)) {
+        throw new TypeError("Async redaction is invalid.");
+      }
       return createToolCall({
         id: call.id,
         name: call.name,
@@ -71,7 +73,9 @@ export class ToolExecutionEventRedactor {
     if (this.redactor.redactResult === undefined) return result;
     try {
       const value: unknown = this.redactor.redactResult(result, context);
-      if (isThenable(value)) throw new TypeError("Async redaction is invalid.");
+      if (rejectAsyncRedaction(value)) {
+        throw new TypeError("Async redaction is invalid.");
+      }
       const snapshot = createToolResult(value as ToolResult);
       if (
         snapshot.toolCallId !== result.toolCallId ||
@@ -99,9 +103,28 @@ function createRedactionContext(
   return Object.freeze({ phase, ...context });
 }
 
-function isThenable(value: unknown): boolean {
-  return (typeof value === "object" && value !== null) ||
-    typeof value === "function"
-    ? typeof (value as { readonly then?: unknown }).then === "function"
-    : false;
+function rejectAsyncRedaction(value: unknown): boolean {
+  if (
+    !(
+      (typeof value === "object" && value !== null) ||
+      typeof value === "function"
+    )
+  ) {
+    return false;
+  }
+  let then: unknown;
+  try {
+    then = (value as { readonly then?: unknown }).then;
+  } catch {
+    return true;
+  }
+  if (typeof then !== "function") return false;
+  try {
+    void new Promise<void>((resolve, reject) => {
+      Reflect.apply(then, value, [() => resolve(), reject]);
+    }).catch(() => undefined);
+  } catch {
+    // Promise and hostile thenable behavior must remain isolated.
+  }
+  return true;
 }
