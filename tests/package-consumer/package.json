@@ -1,0 +1,24 @@
+{
+  "name": "@agentforge/test-package-consumer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc -p tsconfig.json",
+    "smoke": "node src/runtime.mjs",
+    "verify": "pnpm check && pnpm smoke"
+  },
+  "dependencies": {
+    "@agentforge/config": "workspace:*",
+    "@agentforge/core": "workspace:*",
+    "@agentforge/example-tools": "workspace:*",
+    "@agentforge/logger": "workspace:*",
+    "@agentforge/ollama-client": "workspace:*",
+    "@agentforge/plugin-sdk": "workspace:*",
+    "@agentforge/provider-mock": "workspace:*",
+    "@agentforge/provider-ollama": "workspace:*",
+    "@agentforge/provider-sdk": "workspace:*",
+    "@agentforge/shared": "workspace:*",
+    "@agentforge/storage-filesystem": "workspace:*"
+  }
+}

@@ -1,6 +1,7 @@
 packages:
   - "packages/*"
   - "examples/*"
+  - "tests/package-consumer"
 
 overrides:
   postcss: 8.5.6

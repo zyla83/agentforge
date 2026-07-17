@@ -48,6 +48,8 @@ The first AgentForge MVP baseline. No release date or tag has been created.
 
 ### Fixed
 
+- MVP package smoke checks now resolve TypeScript and runtime imports through real
+  workspace package manifests instead of direct `dist` paths
 - Semantic version validation rejects whitespace and underscores
 - Unknown provider names consistently use the `<unknown>` fallback
 - Ollama health checks reject unsafe base URLs and preserve model-aware status

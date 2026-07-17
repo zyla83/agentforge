@@ -182,6 +182,42 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
+  tests/package-consumer:
+    dependencies:
+      '@agentforge/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@agentforge/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@agentforge/example-tools':
+        specifier: workspace:*
+        version: link:../../packages/example-tools
+      '@agentforge/logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
+      '@agentforge/ollama-client':
+        specifier: workspace:*
+        version: link:../../packages/ollama-client
+      '@agentforge/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
+      '@agentforge/provider-mock':
+        specifier: workspace:*
+        version: link:../../packages/provider-mock
+      '@agentforge/provider-ollama':
+        specifier: workspace:*
+        version: link:../../packages/provider-ollama
+      '@agentforge/provider-sdk':
+        specifier: workspace:*
+        version: link:../../packages/provider-sdk
+      '@agentforge/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@agentforge/storage-filesystem':
+        specifier: workspace:*
+        version: link:../../packages/storage-filesystem
+
 packages:
 
   '@biomejs/biome@1.9.4':

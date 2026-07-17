@@ -25,9 +25,12 @@ pnpm verify:mvp
 ```
 
 `verify:mvp` checks formatting and lint, builds every workspace package, runs
-the complete test suite, runs both deterministic examples, type-checks public
-package-root imports, and imports selected runtime exports from built packages.
-It does not require Ollama or network model downloads.
+the complete test suite and both deterministic examples, then validates all
+public package entry points through a private workspace consumer. The consumer
+uses normal package-name resolution for TypeScript declarations and runtime
+exports, so it exercises package manifests without direct source or `dist`
+paths. This is a workspace consumer check, not a packed-tarball or registry
+installation test. It does not require Ollama or network model downloads.
 
 ## Manual Ollama smoke test
 

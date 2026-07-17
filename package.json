@@ -14,7 +14,7 @@
     "example:ollama": "pnpm --filter @agentforge/example-ollama start",
     "example:tools": "pnpm --filter @agentforge/example-tool-execution start",
     "format": "biome format --write .",
-    "smoke:packages": "tsc -p tests/public-api/tsconfig.json && node scripts/smoke-packages.mjs",
+    "smoke:packages": "pnpm --filter @agentforge/test-package-consumer verify",
     "test": "pnpm run build && vitest run",
     "test:storage-filesystem": "vitest run tests/storage-filesystem",
     "test:unit": "vitest run",
