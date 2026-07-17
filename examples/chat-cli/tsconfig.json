@@ -10,6 +10,7 @@
   "include": ["src/**/*.ts"],
   "references": [
     { "path": "../../packages/core" },
+    { "path": "../../packages/example-tools" },
     { "path": "../../packages/provider-ollama" },
     { "path": "../../packages/provider-sdk" },
     { "path": "../../packages/storage-filesystem" }

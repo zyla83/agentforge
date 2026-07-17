@@ -9,6 +9,11 @@ import { ProviderHealthStatus } from "@agentforge/provider-sdk";
 import type { ProviderHealth } from "@agentforge/provider-sdk";
 import { createFilesystemConversationStore } from "@agentforge/storage-filesystem";
 import { ChatApplication } from "./ChatApplication.js";
+import {
+  createChatConversationEngine,
+  createChatToolOptions,
+  registerConfiguredChatTools,
+} from "./chatTools.js";
 import { createChatProfile } from "./createChatProfile.js";
 import { loadChatEnvironment } from "./environment.js";
 import { formatChatError } from "./formatChatError.js";
@@ -21,6 +26,8 @@ async function main(): Promise<void> {
   });
   const agent = new AgentForge({ instanceName: "interactive-chat" });
   agent.registerLLMProvider(provider, { default: true });
+  const tools = createChatToolOptions(environment.toolMode);
+  registerConfiguredChatTools(agent, tools);
 
   try {
     await agent.start();
@@ -30,7 +37,7 @@ async function main(): Promise<void> {
     assertHealthyOllama(health, environment.model);
 
     const profile = createChatProfile(environment, provider.metadata.name);
-    const engine = agent.createConversationEngine({ profile });
+    const engine = createChatConversationEngine(agent, profile, tools);
     const store = createFilesystemConversationStore({
       directory: environment.dataDirectory,
     });
@@ -46,6 +53,7 @@ async function main(): Promise<void> {
       input: process.stdin,
       output: process.stdout,
       errorOutput: process.stderr,
+      tools,
     });
     await application.run();
   } finally {

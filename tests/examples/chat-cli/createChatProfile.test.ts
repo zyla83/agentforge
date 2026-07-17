@@ -9,6 +9,8 @@ describe("createChatProfile", () => {
       model: "model",
       systemPrompt: "System instruction.",
       timeoutMs: 120_000,
+      dataDirectory: "C:\\chat-data",
+      toolMode: "off",
     };
     const before = { ...environment };
 

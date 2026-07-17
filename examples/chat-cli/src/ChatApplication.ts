@@ -15,6 +15,7 @@ import type {
 } from "@agentforge/core";
 import { ProviderAbortError } from "@agentforge/provider-sdk";
 import type { ChatApplicationOptions } from "./ChatApplicationOptions.js";
+import type { ChatApplicationToolOptions } from "./ChatApplicationOptions.js";
 import { ChatCommandType } from "./ChatCommand.js";
 import type { ChatCommand } from "./ChatCommand.js";
 import { formatConversationList } from "./commands/formatConversationList.js";
@@ -23,6 +24,10 @@ import { readImportedConversation } from "./files/readImportedConversation.js";
 import { writeExportedConversation } from "./files/writeExportedConversation.js";
 import { formatChatError } from "./formatChatError.js";
 import { parseChatCommand } from "./parseChatCommand.js";
+import {
+  formatToolCallCompleted,
+  formatToolCallStarted,
+} from "./tools/formatToolEvent.js";
 
 const HELP_TEXT = `Commands:
   /help                       Show available commands
@@ -36,6 +41,10 @@ const HELP_TEXT = `Commands:
   /import <file-path>         Import and save a conversation
   /exit                       Exit the chat
   /quit                       Exit the chat
+
+Tool configuration:
+  Set AGENTFORGE_CHAT_TOOLS=example to enable the bundled example tools.
+  Available: calculator, format_text, lookup_inventory
 `;
 
 export class ChatApplication {
@@ -47,6 +56,7 @@ export class ChatApplication {
   private readonly input: NodeJS.ReadableStream;
   private readonly output: NodeJS.WritableStream;
   private readonly errorOutput: NodeJS.WritableStream;
+  private readonly tools: Readonly<ChatApplicationToolOptions>;
   private conversation: Conversation;
   private currentRevision: number | undefined;
   private activeController: ConversationTurnController | undefined;
@@ -66,6 +76,10 @@ export class ChatApplication {
     this.input = options.input;
     this.output = options.output;
     this.errorOutput = options.errorOutput;
+    this.tools = Object.freeze({
+      mode: options.tools.mode,
+      definitions: Object.freeze([...options.tools.definitions]),
+    });
   }
 
   async run(): Promise<void> {
@@ -265,8 +279,9 @@ export class ChatApplication {
   }
 
   private printInfo(): void {
+    const toolNames = this.getToolNames();
     this.output.write(
-      `Profile: ${this.profile.id}\nProvider: ${this.profile.provider ?? "default"}\nModel: ${this.profile.model ?? "unspecified"}\nConversation ID: ${this.conversation.id}\nMessages: ${this.conversation.messages.length}\nRevision: ${this.currentRevision ?? "unsaved"}\nData directory: ${this.dataDirectory}\n`,
+      `Profile: ${this.profile.id}\nProvider: ${this.profile.provider ?? "default"}\nModel: ${this.profile.model ?? "unspecified"}\nTools mode: ${this.tools.mode}\nRegistered tools: ${toolNames.length > 0 ? toolNames.join(", ") : "none"}\nTool execution: ${this.tools.mode === "example" ? "enabled" : "disabled"}\nConversation ID: ${this.conversation.id}\nMessages: ${this.conversation.messages.length}\nRevision: ${this.currentRevision ?? "unsaved"}\nData directory: ${this.dataDirectory}\n`,
     );
   }
 
@@ -275,8 +290,7 @@ export class ChatApplication {
     this.activeController = controller;
     let completedConversation: Conversation | undefined;
     let receivedNonEmptyDelta = false;
-    this.output.write("Assistant: ");
-    this.assistantLineOpen = true;
+    let assistantPrefixWritten = false;
 
     try {
       for await (const event of this.engine.streamTurn({
@@ -288,16 +302,32 @@ export class ChatApplication {
         },
       })) {
         if (event.type === "delta") {
+          if (event.delta.length === 0) continue;
+          if (!assistantPrefixWritten) {
+            this.output.write("Assistant: ");
+            assistantPrefixWritten = true;
+          }
           this.output.write(event.delta);
-          if (event.delta.length > 0) receivedNonEmptyDelta = true;
+          receivedNonEmptyDelta = true;
           this.assistantLineOpen = !event.delta.endsWith("\n");
+        }
+        if (event.type === "tool-call-started") {
+          this.closeAssistantLine();
+          assistantPrefixWritten = false;
+          this.output.write(`${formatToolCallStarted(event.call)}\n`);
+        }
+        if (event.type === "tool-call-completed") {
+          this.closeAssistantLine();
+          assistantPrefixWritten = false;
+          this.output.write(`${formatToolCallCompleted(event.result)}\n`);
         }
         if (event.type === "completed") {
           completedConversation = event.conversation;
           if (!receivedNonEmptyDelta) {
             const completedContent = event.assistantMessage.content;
-            this.output.write(completedContent);
             if (completedContent.length > 0) {
+              this.output.write(`Assistant: ${completedContent}`);
+              assistantPrefixWritten = true;
               this.assistantLineOpen = !completedContent.endsWith("\n");
             }
           }
@@ -309,8 +339,7 @@ export class ChatApplication {
           "The conversation turn ended without a completed event.",
         );
       }
-      if (this.assistantLineOpen) this.output.write("\n");
-      this.assistantLineOpen = false;
+      this.closeAssistantLine();
 
       try {
         const entry = await this.store.save(completedConversation);
@@ -323,8 +352,7 @@ export class ChatApplication {
         this.errorOutput.write(`${formatChatError(error)}\n`);
       }
     } catch (error) {
-      if (this.assistantLineOpen) this.output.write("\n");
-      this.assistantLineOpen = false;
+      this.closeAssistantLine();
       if (
         controller.aborted &&
         (error instanceof ConversationTurnAbortedError ||
@@ -342,9 +370,23 @@ export class ChatApplication {
   }
 
   private printBanner(): void {
+    const toolNames = this.getToolNames();
+    const tools =
+      this.tools.mode === "example"
+        ? `example (${toolNames.join(", ")})`
+        : "off";
     this.output.write(
-      `AgentForge Interactive Chat\nProvider: ${this.profile.provider ?? "default"}\nModel: ${this.profile.model ?? "unspecified"}\nType /help for commands.\n`,
+      `AgentForge Interactive Chat\nProvider: ${this.profile.provider ?? "default"}\nModel: ${this.profile.model ?? "unspecified"}\nTools: ${tools}\nType /help for commands.\n`,
     );
+  }
+
+  private getToolNames(): readonly string[] {
+    return this.tools.definitions.map(({ name }) => name);
+  }
+
+  private closeAssistantLine(): void {
+    if (this.assistantLineOpen) this.output.write("\n");
+    this.assistantLineOpen = false;
   }
 
   private closeReadline(): void {

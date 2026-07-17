@@ -67,6 +67,17 @@ The CLI saves data under `.agentforge/chat` by default. See the
 override, persistence semantics, and import/export format. Ctrl+C during
 generation cancels the active response without saving partial output.
 
+Example tools are disabled by default. Enable all three bundled tools at
+startup with a tool-capable Ollama model:
+
+```bash
+AGENTFORGE_CHAT_TOOLS=example pnpm example:chat
+```
+
+Tool calls and results appear as terminal status lines, and completed
+tool-enabled conversations retain their V2 tool messages. The mode cannot be
+changed while the CLI is running.
+
 ## Workspace
 
 - `packages/core` - the AgentForge facade and framework lifecycle
@@ -298,8 +309,8 @@ errors, such as division by zero or an unknown inventory SKU, are converted by
 `ToolExecutor` into structured failures. The handlers do not access the
 network, filesystem, environment, current time, or random state.
 
-Run the non-network two-round calculator example with `pnpm example:tools`.
-Interactive chat CLI tool integration is deferred to Task-032.
+Run the non-network two-round calculator example with `pnpm example:tools`, or
+set `AGENTFORGE_CHAT_TOOLS=example` when starting the interactive chat CLI.
 
 ## Conversation model
 
@@ -781,8 +792,7 @@ const engine = agent.createConversationEngine({
 });
 ```
 
-Built-in example tools and chat CLI tool integration are deferred to later
-tasks. Advertising tool support means the adapter understands Ollama's tool
+Advertising tool support means the adapter understands Ollama's tool
 wire semantics; it does not imply that every installed model supports tools.
 
 Configure a model-aware health check when readiness requires a specific local

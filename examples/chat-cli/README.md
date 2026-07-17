@@ -31,10 +31,56 @@ latest conversation automatically; use `/list` and `/load` to resume one.
 | `AGENTFORGE_SYSTEM_PROMPT` | `You are a helpful, clear, and concise local AI assistant.` |
 | `AGENTFORGE_REQUEST_TIMEOUT_MS` | `120000` |
 | `AGENTFORGE_CHAT_DATA_DIR` | `.agentforge/chat` relative to the current working directory |
+| `AGENTFORGE_CHAT_TOOLS` | `off` |
 
 Relative data-directory overrides are resolved from the current working
 directory. The system prompt becomes an immutable agent profile instruction and
 is not stored in conversation history.
+
+## Example tools
+
+The default `off` mode preserves the existing text-only chat. Set
+`AGENTFORGE_CHAT_TOOLS=example` at startup to register and enable the bundled
+`calculator`, `format_text`, and `lookup_inventory` tools. The configured
+Ollama model must support tool calling; compatibility is model-dependent.
+
+POSIX-compatible shells:
+
+```bash
+AGENTFORGE_CHAT_TOOLS=example pnpm example:chat
+```
+
+PowerShell:
+
+```powershell
+$env:AGENTFORGE_CHAT_TOOLS = "example"
+pnpm example:chat
+```
+
+Windows CMD:
+
+```cmd
+set AGENTFORGE_CHAT_TOOLS=example
+pnpm example:chat
+```
+
+Tool calls and structured results are shown as status lines. Completed
+tool-enabled turns persist their full V2 history, including assistant tool-call
+messages and tool-result messages. Loading does not strip historical tool
+messages or change the startup mode; continuing tool-enabled history in `off`
+mode may require matching tool configuration. There is no runtime tool toggle.
+
+Example prompts:
+
+```text
+What is 144 divided by 12?
+Convert "agent forge" to uppercase.
+Format "hello world" using title case.
+Is AF-DOCK-01 in stock?
+Show warehouse availability for AF-KEYBOARD-01.
+```
+
+The model decides whether to call a tool for any prompt.
 
 ## Commands
 
@@ -64,11 +110,11 @@ at revision 1.
 
 ## Import and export
 
-`/export` atomically writes a pretty V1 `agentforge.conversation` JSON document.
-It does not include store revision metadata. `/import` accepts the same plain V1
+`/export` atomically writes a pretty V2 `agentforge.conversation` JSON document.
+It does not include store revision metadata. `/import` accepts the same plain
 format, validates it with core serialization, saves it, and then makes it
 active. Importing an ID that already exists explicitly replaces its stored
-snapshot at the next revision. Store-managed files use the distinct V1
+snapshot at the next revision. Store-managed files use the distinct V2
 `agentforge.conversation-store-entry` envelope and are not valid import files.
 
 Example session:
@@ -106,9 +152,9 @@ does not save automatically.
 ## Known limitations
 
 - Ollama only
-- Text only
+- Tool calling requires explicit startup configuration and a compatible model
 - No automatic resume
 - No cross-process write coordination
-- No tool calling
+- No runtime tool-mode switching
 - No Markdown rendering
 - No model switching during a session

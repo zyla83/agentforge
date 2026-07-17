@@ -94,3 +94,8 @@
 - `@agentforge/example-tools` with calculator, text-formatting, and inventory lookup examples
 - Explicit ordered example-tool registration helper with immutable associations
 - Deterministic non-network two-round conversation tool execution example
+- Opt-in `AGENTFORGE_CHAT_TOOLS=example` mode for the interactive chat CLI
+- Ordered example-tool registration and explicitly enabled conversation tool execution
+- Tool-call and structured tool-result status lines during terminal streaming
+- V2 persistence for completed tool-enabled chat conversations
+- Text-only interactive chat remains the default when tool mode is unset or `off`

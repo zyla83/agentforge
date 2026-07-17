@@ -14,6 +14,7 @@ import type {
 import { LLMFinishReason, LLMMessageRole } from "@agentforge/provider-sdk";
 import { describe, expect, it } from "vitest";
 import { ChatApplication } from "../../../examples/chat-cli/src/ChatApplication.js";
+import { createChatToolOptions } from "../../../examples/chat-cli/src/chatTools.js";
 
 function captureStream() {
   const stream = new PassThrough();
@@ -194,6 +195,7 @@ function createApplication(
     input,
     output,
     errorOutput,
+    tools: createChatToolOptions("off"),
   });
 }
 
@@ -323,7 +325,6 @@ describe("ChatApplication", () => {
     const running = application.run();
     await output.waitFor("You: ");
     input.write("Question\n");
-    await output.waitFor("Assistant: ");
     await output.waitFor("You: ", 2);
     input.write("/info\n");
     await output.waitFor("Data directory: C:\\test-data\nYou: ");
@@ -332,7 +333,7 @@ describe("ChatApplication", () => {
 
     expect(output.read()).not.toContain("undefined");
     expect(output.read()).not.toContain("null");
-    expect(output.read()).toContain("Assistant: \nYou: ");
+    expect(output.read()).not.toContain("Assistant: \nYou: ");
     expect(output.read()).toContain("Messages: 0");
     expect(errors.read()).toContain("could not be persisted");
   });
@@ -354,7 +355,9 @@ describe("ChatApplication", () => {
     input.write("\n");
     await output.waitFor("You: ", 2);
     input.write("/help\n");
-    await output.waitFor("/quit                       Exit the chat\nYou: ");
+    await output.waitFor(
+      "Available: calculator, format_text, lookup_inventory\nYou: ",
+    );
     input.write("/info\n");
     await output.waitFor("Data directory: C:\\test-data\nYou: ");
     input.write("/reset\n");
@@ -368,6 +371,10 @@ describe("ChatApplication", () => {
     expect(output.read()).toContain(
       "/help                       Show available commands",
     );
+    expect(output.read()).toContain("Tools: off");
+    expect(output.read()).toContain("Tools mode: off");
+    expect(output.read()).toContain("Registered tools: none");
+    expect(output.read()).toContain("Tool execution: disabled");
     expect(output.read()).toContain("Conversation reset.");
     expect(output.read().match(/Messages: 0/g)).toHaveLength(2);
     expect(errors.read()).toBe("");

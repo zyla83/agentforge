@@ -5,6 +5,13 @@ import type {
   ConversationStore,
   ConversationStoreEntry,
 } from "@agentforge/core";
+import type { ToolDefinition } from "@agentforge/provider-sdk";
+import type { ChatToolMode } from "./environment.js";
+
+export interface ChatApplicationToolOptions {
+  readonly mode: ChatToolMode;
+  readonly definitions: readonly Readonly<ToolDefinition>[];
+}
 
 export interface ChatApplicationOptions {
   readonly agent: AgentForge;
@@ -17,4 +24,5 @@ export interface ChatApplicationOptions {
   readonly input: NodeJS.ReadableStream;
   readonly output: NodeJS.WritableStream;
   readonly errorOutput: NodeJS.WritableStream;
+  readonly tools: Readonly<ChatApplicationToolOptions>;
 }

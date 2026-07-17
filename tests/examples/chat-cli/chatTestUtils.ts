@@ -12,6 +12,7 @@ import type {
 } from "@agentforge/core";
 import { LLMFinishReason, LLMMessageRole } from "@agentforge/provider-sdk";
 import { ChatApplication } from "../../../examples/chat-cli/src/ChatApplication.js";
+import { createChatToolOptions } from "../../../examples/chat-cli/src/chatTools.js";
 
 export function captureStream() {
   const stream = new PassThrough();
@@ -109,6 +110,7 @@ export function createTestApplication(options: {
     input: options.input,
     output: options.output,
     errorOutput: options.errorOutput,
+    tools: createChatToolOptions("off"),
   });
 }
 

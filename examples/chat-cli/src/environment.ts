@@ -8,12 +8,15 @@ const DEFAULT_SYSTEM_PROMPT =
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_DATA_DIRECTORY = ".agentforge/chat";
 
+export type ChatToolMode = "off" | "example";
+
 export interface ChatEnvironment {
   readonly baseUrl: string;
   readonly model: string;
   readonly systemPrompt: string;
   readonly timeoutMs: number;
   readonly dataDirectory: string;
+  readonly toolMode: ChatToolMode;
 }
 
 export function loadChatEnvironment(
@@ -32,6 +35,7 @@ export function loadChatEnvironment(
     currentWorkingDirectory,
     readDataDirectory(environment),
   );
+  const toolMode = readToolMode(environment);
 
   return Object.freeze({
     baseUrl,
@@ -39,7 +43,16 @@ export function loadChatEnvironment(
     systemPrompt,
     timeoutMs,
     dataDirectory,
+    toolMode,
   });
+}
+
+function readToolMode(environment: NodeJS.ProcessEnv): ChatToolMode {
+  const value = environment.AGENTFORGE_CHAT_TOOLS;
+  if (value === undefined) return "off";
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "off" || normalized === "example") return normalized;
+  throw new Error('AGENTFORGE_CHAT_TOOLS must be either "off" or "example".');
 }
 
 function readDataDirectory(environment: NodeJS.ProcessEnv): string {

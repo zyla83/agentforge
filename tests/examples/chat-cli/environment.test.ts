@@ -13,6 +13,7 @@ describe("loadChatEnvironment", () => {
       dataDirectory: expect.stringMatching(
         /[\\/]workspace[\\/]\.agentforge[\\/]chat$/u,
       ),
+      toolMode: "off",
     });
     expect(Object.isFrozen(environment)).toBe(true);
   });
@@ -33,9 +34,34 @@ describe("loadChatEnvironment", () => {
       systemPrompt: "  Answer clearly.\n  ",
       timeoutMs: 45_000,
       dataDirectory: expect.stringMatching(/[\\/]workspace[\\/]custom data$/u),
+      toolMode: "off",
     });
     expect(input).toEqual(before);
   });
+
+  it.each([
+    [undefined, "off"],
+    ["off", "off"],
+    ["OFF", "off"],
+    ["example", "example"],
+    ["  ExAmPlE\t", "example"],
+  ] as const)("parses tool mode %j as %s", (value, expected) => {
+    const environment = loadChatEnvironment(
+      value === undefined ? {} : { AGENTFORGE_CHAT_TOOLS: value },
+      "/workspace",
+    );
+    expect(environment.toolMode).toBe(expected);
+    expect(Object.isFrozen(environment)).toBe(true);
+  });
+
+  it.each(["", " ", "true", "1", "yes", "all", "examples"])(
+    "rejects unsupported tool mode %j",
+    (value) => {
+      expect(() =>
+        loadChatEnvironment({ AGENTFORGE_CHAT_TOOLS: value }),
+      ).toThrow('AGENTFORGE_CHAT_TOOLS must be either "off" or "example".');
+    },
+  );
 
   it.each([
     [{ OLLAMA_BASE_URL: " " }, "OLLAMA_BASE_URL"],

@@ -45,6 +45,9 @@ importers:
       '@agentforge/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@agentforge/example-tools':
+        specifier: workspace:*
+        version: link:../../packages/example-tools
       '@agentforge/provider-ollama':
         specifier: workspace:*
         version: link:../../packages/provider-ollama

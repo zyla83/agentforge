@@ -17,6 +17,7 @@ import type {
   ConversationStoreListResult,
   ConversationTurnInput,
 } from "@agentforge/core";
+import { createToolCall } from "@agentforge/provider-sdk";
 import { createFilesystemConversationStore } from "@agentforge/storage-filesystem";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -284,6 +285,52 @@ describe("ChatApplication persistence", () => {
     expect((await store.require("active")).conversation.messages).toHaveLength(
       0,
     );
+    expect(errors.read()).toBe("");
+  });
+
+  it("does not invent tool completion or persist after cancellation", async () => {
+    const store = createInMemoryConversationStore();
+    const initialEntry = await store.save(createConversation({ id: "active" }));
+    const engine = {
+      async *streamTurn(turn: ConversationTurnInput) {
+        yield {
+          type: "tool-call-started",
+          call: createToolCall({
+            id: "call-1",
+            name: "calculator",
+            arguments: { operation: "multiply", left: 7, right: 6 },
+          }),
+          round: 1,
+        } as const;
+        await waitForAbort(turn.request?.signal);
+        throw new ConversationTurnAbortedError("tool-execution", {
+          reason: turn.request?.signal?.reason,
+        });
+      },
+    } as unknown as ConversationEngine;
+    const input = new PassThrough();
+    const output = captureStream();
+    const errors = captureStream();
+    const application = createTestApplication({
+      input,
+      output: output.stream,
+      errorOutput: errors.stream,
+      engine,
+      store,
+      initialEntry,
+    });
+
+    const running = application.run();
+    await output.waitFor("You: ");
+    input.write("Calculate\n");
+    await output.waitFor("Tool: calculator");
+    application.cancelActiveTurn(new Error("test cancellation"));
+    await output.waitFor("Response cancelled.\nYou: ");
+    input.write("/exit\n");
+    await running;
+
+    expect(output.read()).not.toContain("Tool result:");
+    expect((await store.require("active")).revision).toBe(1);
     expect(errors.read()).toBe("");
   });
 
