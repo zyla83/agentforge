@@ -6,10 +6,12 @@ validated application tools.
 
 ## Status
 
-AgentForge 0.1.0 is an MVP candidate. The deterministic examples and automated
-test suite run without Ollama; live generation requires a local Ollama server.
-The framework supplies orchestration infrastructure, while applications own
-their tool handlers, permissions, and safety policy.
+AgentForge 0.1.0 is the first MVP baseline, distributed as a GitHub source
+release. The deterministic examples and automated test suite run without
+Ollama; live generation requires a local Ollama server. The framework supplies
+orchestration infrastructure, while applications own their tool handlers,
+permissions, and safety policy. This source release does not publish npm
+packages.
 
 AgentForge follows semantic versioning, but APIs may evolve during the 0.x
 series. Version 0.1.0 is the first MVP baseline, not a production-readiness or

@@ -1,8 +1,9 @@
-# AgentForge 0.1.0 MVP Readiness
+# AgentForge 0.1.0 MVP Release
 
 AgentForge 0.1.0 is the first MVP baseline for building offline-first local AI
-agents in TypeScript. It is an MVP candidate, not a published release or a
-production-security claim.
+agents in TypeScript. This document records the verification for its final
+GitHub source release. It is not a production-security claim, and the source
+release does not publish npm packages.
 
 ## Supported capabilities
 
@@ -34,23 +35,30 @@ installation test. It does not require Ollama or network model downloads.
 
 ## Manual Ollama smoke test
 
-These checks are optional for commits but required before describing a release
-candidate as manually verified against Ollama.
+The release run completed these checks on 2026-07-20 with Windows
+10.0.26200.8875, Node.js 22.14.0, pnpm 11.12.0, Ollama 0.32.1, and the installed
+`llama3.1:8b` model.
 
 Text-only:
 
-- [ ] Start Ollama and select an installed model.
-- [ ] Run the chat CLI with `AGENTFORGE_CHAT_TOOLS=off`.
-- [ ] Send a normal prompt and confirm a streamed answer.
-- [ ] Cancel one response and confirm the conversation remains usable.
+- [x] Start Ollama and select the installed `llama3.1:8b` model.
+- [x] Run `corepack pnpm example:chat` with `AGENTFORGE_CHAT_TOOLS=off`.
+- [x] Confirm a normal streamed answer.
+- [x] Cancel a long response with one physical `Ctrl+C` and confirm the CLI
+  returns to the prompt without exiting.
+- [x] Complete a subsequent turn, save and reload the conversation, and confirm
+  the cancelled prompt and partial assistant output were not persisted.
 
 Tool-enabled:
 
-- [ ] Select a model and Ollama version that support tool calling.
-- [ ] Run the chat CLI with `AGENTFORGE_CHAT_TOOLS=example`.
-- [ ] Request a deterministic calculation.
-- [ ] Confirm tool start and completion lines and the final assistant answer.
-- [ ] Reload the conversation and confirm V2 tool history persists.
+- [x] Use Ollama 0.32.1 with the installed `llama3.1:8b` model.
+- [x] Run `corepack pnpm example:chat` with
+  `AGENTFORGE_CHAT_TOOLS=example`.
+- [x] Request `144 / 12` and confirm exactly one successful `calculator`
+  execution and a final answer of `12`.
+- [x] Complete a subsequent turn and exit cleanly.
+- [x] Save and reload the V2 conversation and confirm the correlated tool call
+  and result remain present.
 
 Model tool support is not part of the standard provider health check and is not
 inferred from the adapter capability flag.
@@ -79,16 +87,18 @@ Observer redaction does not alter model-visible or persisted values.
 
 - [x] `pnpm install --frozen-lockfile`
 - [x] `pnpm verify:mvp`
-- [ ] Complete the manual Ollama text chat smoke test.
-- [ ] Complete the manual Ollama tool-call smoke test.
+- [x] Complete the manual Ollama text chat, cancellation, persistence, and exit
+  smoke test.
+- [x] Complete the manual Ollama tool-call and V2 persistence smoke test.
 - [x] Review the changelog for the 0.1.0 baseline.
 - [x] Review workspace package versions.
 - [x] Confirm a clean working tree after automated verification.
-- [ ] Decide publication metadata and package documentation policy.
-- [ ] Create a release commit/tag only through a separately authorized process.
+- [x] Confirm package-registry publication remains explicitly deferred.
+- [x] Prepare the authorized source-release commit; tag creation remains gated
+  on successful GitHub Actions for that exact commit and is verified externally.
 
-Manual items remain unchecked because the automated MVP gate does not run a live
-Ollama server or publish packages.
+The source-release checklist does not assert that the annotated tag or GitHub
+Release exists before the exact-commit CI gate completes.
 
 ## Publication readiness
 
@@ -99,7 +109,8 @@ deferred: most package manifests currently whitelist only `dist`, package-level
 README coverage is incomplete, and repository/homepage/bugs/author metadata has
 not been declared consistently. The root MIT license is established, but its
 packaging must be reviewed before publishing. No registry credentials or publish
-operation are part of the MVP gate.
+operation are part of the MVP gate. The GitHub source release does not publish
+these packages to npm.
 
 ## Post-MVP work
 

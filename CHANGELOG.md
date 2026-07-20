@@ -1,8 +1,8 @@
 # Changelog
 
-## v0.1.0 (work in progress)
+## v0.1.0 (2026-07-20)
 
-The first AgentForge MVP baseline. No release date or tag has been created.
+The first AgentForge MVP baseline.
 
 ### Added
 
