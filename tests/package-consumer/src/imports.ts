@@ -24,6 +24,10 @@ import {
 } from "@agentforge/provider-sdk";
 import { AgentForgeError } from "@agentforge/shared";
 import {
+  SpotifyAuthorizationSession,
+  SpotifyClient,
+} from "@agentforge/spotify-client";
+import {
   FilesystemConversationStore,
   createFilesystemConversationStore,
 } from "@agentforge/storage-filesystem";
@@ -56,6 +60,8 @@ void [
   ProviderRequestError,
   createToolDefinition,
   AgentForgeError,
+  SpotifyAuthorizationSession,
+  SpotifyClient,
   FilesystemConversationStore,
   createFilesystemConversationStore,
   publicTypeImports,

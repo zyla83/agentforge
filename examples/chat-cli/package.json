@@ -12,6 +12,7 @@
     "@agentforge/example-tools": "workspace:*",
     "@agentforge/provider-ollama": "workspace:*",
     "@agentforge/provider-sdk": "workspace:*",
+    "@agentforge/spotify-client": "workspace:*",
     "@agentforge/storage-filesystem": "workspace:*"
   },
   "devDependencies": {

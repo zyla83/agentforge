@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Spotify Authorization Code with PKCE, refresh-token rotation, and immutable
+  current-playback inspection through `@agentforge/spotify-client`
+- Opt-in `AGENTFORGE_CHAT_TOOLS=spotify` mode with the read-only
+  `spotify_get_current_playback` tool
+
+### Security
+
+- Spotify authentication uses a temporary loopback-only callback and no client
+  secret, but the persisted refresh credential remains sensitive plaintext and
+  is not protected by an AgentForge credential vault
+- Normalized playback data may reveal listening activity and device metadata and
+  may be visible to the model or persisted in conversation history
+
 ## v0.1.0 (2026-07-20)
 
 The first AgentForge MVP baseline.

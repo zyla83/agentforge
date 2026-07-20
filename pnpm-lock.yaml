@@ -54,6 +54,9 @@ importers:
       '@agentforge/provider-sdk':
         specifier: workspace:*
         version: link:../../packages/provider-sdk
+      '@agentforge/spotify-client':
+        specifier: workspace:*
+        version: link:../../packages/spotify-client
       '@agentforge/storage-filesystem':
         specifier: workspace:*
         version: link:../../packages/storage-filesystem
@@ -169,6 +172,15 @@ importers:
 
   packages/shared: {}
 
+  packages/spotify-client:
+    devDependencies:
+      '@types/node':
+        specifier: 22.15.30
+        version: 22.15.30
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   packages/storage-filesystem:
     dependencies:
       '@agentforge/core':
@@ -214,6 +226,9 @@ importers:
       '@agentforge/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@agentforge/spotify-client':
+        specifier: workspace:*
+        version: link:../../packages/spotify-client
       '@agentforge/storage-filesystem':
         specifier: workspace:*
         version: link:../../packages/storage-filesystem

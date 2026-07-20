@@ -34,6 +34,9 @@ export default defineConfig({
       "@agentforge/shared": fileURLToPath(
         new URL("./packages/shared/src/index.ts", import.meta.url),
       ),
+      "@agentforge/spotify-client": fileURLToPath(
+        new URL("./packages/spotify-client/src/index.ts", import.meta.url),
+      ),
       "@agentforge/storage-filesystem": fileURLToPath(
         new URL("./packages/storage-filesystem/src/index.ts", import.meta.url),
       ),

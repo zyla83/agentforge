@@ -32,6 +32,9 @@ latest conversation automatically; use `/list` and `/load` to resume one.
 | `AGENTFORGE_REQUEST_TIMEOUT_MS` | `120000` |
 | `AGENTFORGE_CHAT_DATA_DIR` | `.agentforge/chat` relative to the current working directory |
 | `AGENTFORGE_CHAT_TOOLS` | `off` |
+| `SPOTIFY_CLIENT_ID` | Required only when tool mode is `spotify` |
+| `SPOTIFY_REDIRECT_URI` | `http://127.0.0.1:43821/callback` |
+| `AGENTFORGE_SPOTIFY_DATA_DIR` | `<home>/.agentforge/spotify` |
 
 Relative data-directory overrides are resolved from the current working
 directory. The system prompt becomes an immutable agent profile instruction and
@@ -97,6 +100,59 @@ depends on that model and the installed Ollama version.
 The terminal status lines consume `streamTurn()` lifecycle events. They do not
 enable the separate programmatic tool execution observer API, so tool status is
 not duplicated.
+
+## Spotify current playback
+
+Spotify mode is an online, opt-in integration. It requires Spotify Premium, a
+Spotify Developer application, and an internet connection. Register this exact
+redirect URI in the Developer Dashboard:
+
+```text
+http://127.0.0.1:43821/callback
+```
+
+Then provide the non-secret Client ID and select the dedicated mode. Do not
+configure or paste a client secret.
+
+PowerShell:
+
+```powershell
+$env:AGENTFORGE_CHAT_TOOLS = "spotify"
+$env:SPOTIFY_CLIENT_ID = "your-client-id"
+pnpm example:chat
+```
+
+Windows CMD:
+
+```cmd
+set AGENTFORGE_CHAT_TOOLS=spotify
+set SPOTIFY_CLIENT_ID=your-client-id
+pnpm example:chat
+```
+
+On first use, the CLI prints an authorization URL. Open it manually and approve
+only `user-read-playback-state`. The temporary callback listens on IPv4
+loopback only and closes after authorization, failure, timeout, or cancellation.
+The CLI does not open a browser itself.
+
+Spotify mode registers only `spotify_get_current_playback`. The tool reports an
+idle, playing, or paused snapshot and does not modify playback, the queue,
+devices, playlists, the library, or account state. Search and playback control
+are not implemented. Spotify account, scope, API availability, policy, and rate
+limits still apply, and requests are never retried automatically.
+
+The refresh credential defaults to
+`<home>/.agentforge/spotify/spotify-refresh-credential.json`. Override its
+directory with `AGENTFORGE_SPOTIFY_DATA_DIR` or use a safe custom loopback URI
+through `SPOTIFY_REDIRECT_URI` after registering that exact URI with Spotify.
+The credential is sensitive local plaintext with best-effort file permissions,
+not encryption or an OS credential vault. Never commit or share it. Deleting
+the file forces reauthorization but does not revoke Spotify access.
+
+Playback results can expose listening activity and device metadata. They are
+model-visible and may be stored in V2 conversation history. Observer redaction
+does not remove those values from model-visible results or persisted history.
+AgentForge does not download or handle Spotify audio.
 
 ## Commands
 
@@ -168,6 +224,7 @@ does not save automatically.
 ## Known limitations
 
 - Ollama only
+- Spotify current-playback inspection requires network access and external setup
 - Tool calling requires explicit startup configuration and a compatible model
 - No automatic resume
 - No cross-process write coordination

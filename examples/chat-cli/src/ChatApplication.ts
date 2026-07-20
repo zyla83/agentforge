@@ -44,6 +44,7 @@ const HELP_TEXT = `Commands:
 
 Tool configuration:
   Set AGENTFORGE_CHAT_TOOLS=example to enable the bundled example tools.
+  Set AGENTFORGE_CHAT_TOOLS=spotify for read-only current playback inspection.
   Available: calculator, format_text, lookup_inventory
 `;
 
@@ -284,7 +285,7 @@ export class ChatApplication {
   private printInfo(): void {
     const toolNames = this.getToolNames();
     this.output.write(
-      `Profile: ${this.profile.id}\nProvider: ${this.profile.provider ?? "default"}\nModel: ${this.profile.model ?? "unspecified"}\nTools mode: ${this.tools.mode}\nRegistered tools: ${toolNames.length > 0 ? toolNames.join(", ") : "none"}\nTool execution: ${this.tools.mode === "example" ? "enabled" : "disabled"}\nConversation ID: ${this.conversation.id}\nMessages: ${this.conversation.messages.length}\nRevision: ${this.currentRevision ?? "unsaved"}\nData directory: ${this.dataDirectory}\n`,
+      `Profile: ${this.profile.id}\nProvider: ${this.profile.provider ?? "default"}\nModel: ${this.profile.model ?? "unspecified"}\nTools mode: ${this.tools.mode}\nRegistered tools: ${toolNames.length > 0 ? toolNames.join(", ") : "none"}\nTool execution: ${this.tools.mode === "off" ? "disabled" : "enabled"}\nConversation ID: ${this.conversation.id}\nMessages: ${this.conversation.messages.length}\nRevision: ${this.currentRevision ?? "unsaved"}\nData directory: ${this.dataDirectory}\n`,
     );
   }
 
@@ -375,9 +376,9 @@ export class ChatApplication {
   private printBanner(): void {
     const toolNames = this.getToolNames();
     const tools =
-      this.tools.mode === "example"
-        ? `example (${toolNames.join(", ")})`
-        : "off";
+      this.tools.mode === "off"
+        ? "off"
+        : `${this.tools.mode} (${toolNames.join(", ")})`;
     this.output.write(
       `AgentForge Interactive Chat\nProvider: ${this.profile.provider ?? "default"}\nModel: ${this.profile.model ?? "unspecified"}\nTools: ${tools}\nType /help for commands.\n`,
     );

@@ -1,5 +1,10 @@
+import { homedir } from "node:os";
 import { resolve } from "node:path";
 import process from "node:process";
+import {
+  DEFAULT_SPOTIFY_REDIRECT_URI,
+  validateSpotifyRedirectUri,
+} from "@agentforge/spotify-client";
 
 const DEFAULT_BASE_URL = "http://localhost:11434";
 const DEFAULT_MODEL = "llama3.1:8b";
@@ -8,7 +13,13 @@ const DEFAULT_SYSTEM_PROMPT =
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_DATA_DIRECTORY = ".agentforge/chat";
 
-export type ChatToolMode = "off" | "example";
+export type ChatToolMode = "off" | "example" | "spotify";
+
+export interface ChatSpotifyEnvironment {
+  readonly clientId: string;
+  readonly redirectUri: string;
+  readonly dataDirectory: string;
+}
 
 export interface ChatEnvironment {
   readonly baseUrl: string;
@@ -17,6 +28,7 @@ export interface ChatEnvironment {
   readonly timeoutMs: number;
   readonly dataDirectory: string;
   readonly toolMode: ChatToolMode;
+  readonly spotify?: Readonly<ChatSpotifyEnvironment>;
 }
 
 export function loadChatEnvironment(
@@ -36,6 +48,8 @@ export function loadChatEnvironment(
     readDataDirectory(environment),
   );
   const toolMode = readToolMode(environment);
+  const spotify =
+    toolMode === "spotify" ? readSpotifyEnvironment(environment) : undefined;
 
   return Object.freeze({
     baseUrl,
@@ -44,6 +58,7 @@ export function loadChatEnvironment(
     timeoutMs,
     dataDirectory,
     toolMode,
+    ...(spotify === undefined ? {} : { spotify }),
   });
 }
 
@@ -51,8 +66,51 @@ function readToolMode(environment: NodeJS.ProcessEnv): ChatToolMode {
   const value = environment.AGENTFORGE_CHAT_TOOLS;
   if (value === undefined) return "off";
   const normalized = value.trim().toLowerCase();
-  if (normalized === "off" || normalized === "example") return normalized;
-  throw new Error('AGENTFORGE_CHAT_TOOLS must be either "off" or "example".');
+  if (
+    normalized === "off" ||
+    normalized === "example" ||
+    normalized === "spotify"
+  ) {
+    return normalized;
+  }
+  throw new Error(
+    'AGENTFORGE_CHAT_TOOLS must be "off", "example", or "spotify".',
+  );
+}
+
+function readSpotifyEnvironment(
+  environment: NodeJS.ProcessEnv,
+): Readonly<ChatSpotifyEnvironment> {
+  const clientId = environment.SPOTIFY_CLIENT_ID;
+  if (clientId === undefined || clientId.trim().length === 0) {
+    throw new Error(
+      "SPOTIFY_CLIENT_ID must be a non-empty string in Spotify tool mode.",
+    );
+  }
+  const redirectUri =
+    environment.SPOTIFY_REDIRECT_URI ?? DEFAULT_SPOTIFY_REDIRECT_URI;
+  try {
+    validateSpotifyRedirectUri(redirectUri);
+  } catch {
+    throw new Error(
+      "SPOTIFY_REDIRECT_URI must use http://127.0.0.1:<port>/<path> without credentials, query, or fragment.",
+    );
+  }
+  const configuredDirectory = environment.AGENTFORGE_SPOTIFY_DATA_DIR;
+  if (
+    configuredDirectory !== undefined &&
+    configuredDirectory.trim().length === 0
+  ) {
+    throw new Error("AGENTFORGE_SPOTIFY_DATA_DIR must be a non-empty path.");
+  }
+  return Object.freeze({
+    clientId,
+    redirectUri,
+    dataDirectory: resolve(
+      configuredDirectory?.trim() ??
+        resolve(homedir(), ".agentforge", "spotify"),
+    ),
+  });
 }
 
 function readDataDirectory(environment: NodeJS.ProcessEnv): string {

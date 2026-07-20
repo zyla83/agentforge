@@ -19,6 +19,7 @@
     "@agentforge/provider-ollama": "workspace:*",
     "@agentforge/provider-sdk": "workspace:*",
     "@agentforge/shared": "workspace:*",
+    "@agentforge/spotify-client": "workspace:*",
     "@agentforge/storage-filesystem": "workspace:*"
   }
 }

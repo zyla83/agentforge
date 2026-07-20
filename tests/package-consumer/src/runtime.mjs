@@ -8,6 +8,7 @@ import * as providerMock from "@agentforge/provider-mock";
 import * as providerOllama from "@agentforge/provider-ollama";
 import * as providerSdk from "@agentforge/provider-sdk";
 import * as shared from "@agentforge/shared";
+import * as spotifyClient from "@agentforge/spotify-client";
 import * as storageFilesystem from "@agentforge/storage-filesystem";
 
 const packageChecks = [
@@ -34,6 +35,11 @@ const packageChecks = [
     ["ProviderRequestError", "ProviderResponseError", "createToolDefinition"],
   ],
   ["@agentforge/shared", shared, ["AgentForgeError"]],
+  [
+    "@agentforge/spotify-client",
+    spotifyClient,
+    ["SpotifyAuthorizationSession", "SpotifyClient"],
+  ],
   [
     "@agentforge/storage-filesystem",
     storageFilesystem,

@@ -13,6 +13,11 @@ orchestration infrastructure, while applications own their tool handlers,
 permissions, and safety policy. This source release does not publish npm
 packages.
 
+The first post-MVP capability adds opt-in, read-only Spotify current-playback
+inspection to the Ollama chat CLI. Spotify authentication is online and requires
+Premium plus a Developer application; it is not part of the offline MVP. See
+[Spotify current playback setup](examples/chat-cli/README.md#spotify-current-playback).
+
 AgentForge follows semantic versioning, but APIs may evolve during the 0.x
 series. Version 0.1.0 is the first MVP baseline, not a production-readiness or
 formal security claim.
@@ -174,6 +179,7 @@ Core does not depend on Ollama or filesystem adapters.
 
 Publishable library packages:
 
+- `@agentforge/spotify-client` — Spotify PKCE and read-only current-playback client
 - `@agentforge/config` — validated framework configuration
 - `@agentforge/core` — lifecycle, registries, conversations, tools, and orchestration
 - `@agentforge/example-tools` — deterministic reusable tool examples

@@ -7,6 +7,11 @@ import {
 import { OllamaLLMProvider } from "@agentforge/provider-ollama";
 import { ProviderHealthStatus } from "@agentforge/provider-sdk";
 import type { ProviderHealth } from "@agentforge/provider-sdk";
+import {
+  FilesystemSpotifyCredentialStore,
+  SpotifyAuthorizationSession,
+  SpotifyClient,
+} from "@agentforge/spotify-client";
 import { createFilesystemConversationStore } from "@agentforge/storage-filesystem";
 import { ChatApplication } from "./ChatApplication.js";
 import {
@@ -15,6 +20,7 @@ import {
   registerConfiguredChatTools,
 } from "./chatTools.js";
 import { createChatProfile } from "./createChatProfile.js";
+import type { ChatSpotifyEnvironment } from "./environment.js";
 import { loadChatEnvironment } from "./environment.js";
 import { formatChatError } from "./formatChatError.js";
 
@@ -26,8 +32,12 @@ async function main(): Promise<void> {
   });
   const agent = new AgentForge({ instanceName: "interactive-chat" });
   agent.registerLLMProvider(provider, { default: true });
-  const tools = createChatToolOptions(environment.toolMode);
-  registerConfiguredChatTools(agent, tools);
+  const spotify =
+    environment.spotify === undefined
+      ? undefined
+      : createSpotifyDependencies(environment.spotify);
+  const tools = createChatToolOptions(environment.toolMode, spotify);
+  registerConfiguredChatTools(agent, tools, spotify);
 
   try {
     await agent.start();
@@ -35,6 +45,10 @@ async function main(): Promise<void> {
       timeoutMs: environment.timeoutMs,
     });
     assertHealthyOllama(health, environment.model);
+    if (spotify !== undefined) {
+      await ensureSpotifyAuthorization(spotify.session);
+      console.log("Spotify authorization ready.");
+    }
 
     const profile = createChatProfile(environment, provider.metadata.name);
     const engine = createChatConversationEngine(agent, profile, tools);
@@ -60,6 +74,44 @@ async function main(): Promise<void> {
     if (agent.getState() === AgentForgeState.Running) {
       await agent.stop();
     }
+  }
+}
+
+function createSpotifyDependencies(
+  configuration: Readonly<ChatSpotifyEnvironment>,
+): {
+  readonly client: SpotifyClient;
+  readonly session: SpotifyAuthorizationSession;
+} {
+  const store = new FilesystemSpotifyCredentialStore({
+    directory: configuration.dataDirectory,
+  });
+  const session = new SpotifyAuthorizationSession({
+    clientId: configuration.clientId,
+    redirectUri: configuration.redirectUri,
+    credentialStore: store,
+    onAuthorizationUrl: (url) => {
+      console.log("Open this Spotify authorization URL in your browser:");
+      console.log(url);
+    },
+  });
+  return Object.freeze({
+    session,
+    client: new SpotifyClient({ accessTokenSource: session }),
+  });
+}
+
+async function ensureSpotifyAuthorization(
+  session: SpotifyAuthorizationSession,
+): Promise<void> {
+  const controller = new AbortController();
+  const onSigint = (): void =>
+    controller.abort(new Error("Terminal interrupt requested"));
+  process.once("SIGINT", onSigint);
+  try {
+    await session.getAccessToken({ signal: controller.signal });
+  } finally {
+    process.off("SIGINT", onSigint);
   }
 }
 
