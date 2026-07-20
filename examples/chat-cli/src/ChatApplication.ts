@@ -85,12 +85,13 @@ export class ChatApplication {
   async run(): Promise<void> {
     this.running = true;
     this.readline = createReadlineInterface(this.input, this.output);
+    this.readline.on("SIGINT", this.handleSigint);
     this.input.on("end", this.handleInputEnd);
     process.on("SIGINT", this.handleSigint);
     process.on("SIGTERM", this.handleSigterm);
-    this.printBanner();
 
     try {
+      this.printBanner();
       while (this.running) {
         let line: string;
         const promptController = new AbortController();
@@ -128,6 +129,7 @@ export class ChatApplication {
       this.running = false;
       this.promptController?.abort();
       this.cancelActiveTurn(new Error("Chat application closed"));
+      this.readline?.off("SIGINT", this.handleSigint);
       this.closeReadline();
       this.input.off("end", this.handleInputEnd);
       process.off("SIGINT", this.handleSigint);
@@ -141,6 +143,7 @@ export class ChatApplication {
 
   private readonly handleSigint = (): void => {
     if (this.activeController !== undefined) {
+      if (this.activeController.aborted) return;
       if (this.assistantLineOpen) this.output.write("\n");
       this.output.write("Cancelling current response...\n");
       this.assistantLineOpen = false;

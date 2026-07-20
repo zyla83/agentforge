@@ -1,7 +1,9 @@
 import process from "node:process";
+import type { Interface } from "node:readline/promises";
 import { PassThrough } from "node:stream";
 import {
   AgentForge,
+  ConversationTurnAbortedError,
   appendConversationMessage,
   createAgentProfile,
   createConversation,
@@ -16,8 +18,7 @@ import { describe, expect, it } from "vitest";
 import { ChatApplication } from "../../../examples/chat-cli/src/ChatApplication.js";
 import { createChatToolOptions } from "../../../examples/chat-cli/src/chatTools.js";
 
-function captureStream() {
-  const stream = new PassThrough();
+function captureStream(stream: PassThrough = new PassThrough()) {
   let text = "";
   const waiters: Array<{
     readonly expected: string;
@@ -44,8 +45,32 @@ function captureStream() {
   };
 }
 
+class TestTerminalInput extends PassThrough {
+  readonly isTTY = true;
+  isRaw = false;
+
+  setRawMode(mode: boolean): this {
+    this.isRaw = mode;
+    return this;
+  }
+}
+
+class TestTerminalOutput extends PassThrough {
+  readonly isTTY = true;
+  readonly columns = 80;
+  readonly rows = 24;
+}
+
 function countOccurrences(value: string, expected: string): number {
   return value.split(expected).length - 1;
+}
+
+function requireReadline(application: ChatApplication): Interface {
+  const readline = (
+    application as unknown as { readonly readline: Interface | undefined }
+  ).readline;
+  if (readline === undefined) throw new Error("Expected an active readline.");
+  return readline;
 }
 
 function createFakeEngine(inputs: ConversationTurnInput[]): ConversationEngine {
@@ -87,6 +112,85 @@ function createFakeEngine(inputs: ConversationTurnInput[]): ConversationEngine {
       } as const;
     },
   } as unknown as ConversationEngine;
+}
+
+function createCancellableThenCompletedEngine(
+  inputs: ConversationTurnInput[],
+  onAbort: () => void,
+): ConversationEngine {
+  return {
+    async *streamTurn(input: ConversationTurnInput) {
+      inputs.push(input);
+      if (inputs.length === 1) {
+        yield {
+          type: "delta",
+          delta: "partial",
+          content: "partial",
+          provider: "ollama",
+          model: "model",
+          profile: "interactive-chat",
+        } as const;
+        await observeAbort(input.request?.signal, onAbort);
+        throw new ConversationTurnAbortedError("provider-execution", {
+          reason: input.request?.signal?.reason,
+        });
+      }
+
+      const withUser = appendConversationMessage(input.conversation, {
+        role: LLMMessageRole.User,
+        content: input.content,
+      });
+      const completed = appendConversationMessage(withUser, {
+        role: LLMMessageRole.Assistant,
+        content: "Conversation remains usable.",
+      });
+      yield {
+        type: "delta",
+        delta: "Conversation remains usable.",
+        content: "Conversation remains usable.",
+        provider: "ollama",
+        model: "model",
+        profile: "interactive-chat",
+      } as const;
+      yield {
+        type: "completed",
+        conversation: completed,
+        userMessage: requireLast(withUser.messages),
+        assistantMessage: requireLast(completed.messages),
+        response: {
+          model: "model",
+          message: {
+            role: LLMMessageRole.Assistant,
+            content: "Conversation remains usable.",
+          },
+          finishReason: LLMFinishReason.Stop,
+        },
+        provider: "ollama",
+        model: "model",
+        profile: "interactive-chat",
+      } as const;
+    },
+  } as unknown as ConversationEngine;
+}
+
+async function observeAbort(
+  signal: AbortSignal | undefined,
+  onAbort: () => void,
+): Promise<void> {
+  if (signal?.aborted) {
+    onAbort();
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    signal?.addEventListener(
+      "abort",
+      () => {
+        onAbort();
+        resolve();
+      },
+      { once: true },
+    );
+  });
 }
 
 function createScriptedEngine(
@@ -169,6 +273,16 @@ function createApplication(
   output: PassThrough,
   errorOutput: PassThrough,
 ) {
+  return createApplicationHarness(input, engine, output, errorOutput)
+    .application;
+}
+
+function createApplicationHarness(
+  input: NodeJS.ReadableStream,
+  engine: ConversationEngine,
+  output: PassThrough,
+  errorOutput: PassThrough,
+) {
   const profile = createAgentProfile({
     id: "interactive-chat",
     systemPrompt: "Assist.",
@@ -184,7 +298,7 @@ function createApplication(
   const store = createInMemoryConversationStore({
     initialEntries: [initialEntry],
   });
-  return new ChatApplication({
+  const application = new ChatApplication({
     agent: new AgentForge(),
     engine,
     profile,
@@ -197,9 +311,197 @@ function createApplication(
     errorOutput,
     tools: createChatToolOptions("off"),
   });
+  return { application, initialEntry, store };
 }
 
 describe("ChatApplication", () => {
+  it("routes readline SIGINT to active-turn cancellation without duplicate handling", async () => {
+    const input = new TestTerminalInput();
+    const output = captureStream(new TestTerminalOutput());
+    const errors = captureStream();
+    const inputs: ConversationTurnInput[] = [];
+    let abortEvents = 0;
+    const initialInputEndListeners = input.listenerCount("end");
+    const initialSigintListeners = new Set(process.listeners("SIGINT"));
+    const initialSigtermListenerCount = process.listenerCount("SIGTERM");
+    const { application, initialEntry, store } = createApplicationHarness(
+      input,
+      createCancellableThenCompletedEngine(inputs, () => {
+        abortEvents += 1;
+      }),
+      output.stream,
+      errors.stream,
+    );
+
+    const running = application.run();
+    await output.waitFor("You: ");
+    const readline = requireReadline(application);
+    const processSigintHandler = process
+      .listeners("SIGINT")
+      .find((listener) => !initialSigintListeners.has(listener));
+    expect(processSigintHandler).toBeDefined();
+    expect(readline.listeners("SIGINT")).toContain(processSigintHandler);
+
+    input.write("Cancel me\r");
+    await output.waitFor("Assistant: partial");
+    input.write("\x03");
+    processSigintHandler?.();
+    await output.waitFor("Response cancelled.\n");
+    await output.waitFor("You: ", 2);
+
+    input.write("Continue\r");
+    await output.waitFor("Assistant: Conversation remains usable.\n");
+    await output.waitFor("You: ", 3);
+    input.write("/exit\r");
+    await running;
+
+    const persisted = await store.require(initialEntry.conversation.id);
+    expect(abortEvents).toBe(1);
+    expect(inputs).toHaveLength(2);
+    expect(inputs[1]?.conversation.messages).toHaveLength(0);
+    expect(
+      countOccurrences(output.read(), "Cancelling current response..."),
+    ).toBe(1);
+    expect(countOccurrences(output.read(), "Response cancelled.")).toBe(1);
+    expect(output.read()).not.toContain("late delta");
+    expect(persisted.revision).toBe(2);
+    expect(persisted.conversation.messages).toHaveLength(2);
+    expect(persisted.conversation.messages[0]?.content).toBe("Continue");
+    expect(errors.read()).toBe("");
+    expect(input.listenerCount("end")).toBe(initialInputEndListeners);
+    expect(readline.listenerCount("SIGINT")).toBe(0);
+    expect(process.listenerCount("SIGINT")).toBe(initialSigintListeners.size);
+    expect(process.listenerCount("SIGTERM")).toBe(initialSigtermListenerCount);
+  });
+
+  it("uses readline SIGINT to exit an idle prompt and cleans up repeatedly", async () => {
+    const initialSigintListenerCount = process.listenerCount("SIGINT");
+    const initialSigtermListenerCount = process.listenerCount("SIGTERM");
+
+    for (let run = 0; run < 2; run += 1) {
+      const input = new TestTerminalInput();
+      const output = captureStream(new TestTerminalOutput());
+      const errors = captureStream();
+      const initialInputEndListeners = input.listenerCount("end");
+      const application = createApplication(
+        input,
+        createFakeEngine([]),
+        output.stream,
+        errors.stream,
+      );
+
+      const running = application.run();
+      await output.waitFor("You: ");
+      const readline = requireReadline(application);
+      expect(readline.listenerCount("SIGINT")).toBe(1);
+      input.write("\x03");
+      await running;
+
+      expect(output.read()).not.toContain("Cancelling current response...");
+      expect(output.read()).not.toContain("Response cancelled.");
+      expect(errors.read()).toBe("");
+      expect(input.listenerCount("end")).toBe(initialInputEndListeners);
+      expect(readline.listenerCount("SIGINT")).toBe(0);
+      expect(process.listenerCount("SIGINT")).toBe(initialSigintListenerCount);
+      expect(process.listenerCount("SIGTERM")).toBe(
+        initialSigtermListenerCount,
+      );
+    }
+  });
+
+  it("preserves process-level SIGINT as an active-turn fallback", async () => {
+    const input = new PassThrough();
+    const output = captureStream();
+    const errors = captureStream();
+    const inputs: ConversationTurnInput[] = [];
+    const initialSigintListeners = new Set(process.listeners("SIGINT"));
+    const application = createApplication(
+      input,
+      createCancellableThenCompletedEngine(inputs, () => undefined),
+      output.stream,
+      errors.stream,
+    );
+
+    const running = application.run();
+    await output.waitFor("You: ");
+    const processSigintHandler = process
+      .listeners("SIGINT")
+      .find((listener) => !initialSigintListeners.has(listener));
+    expect(processSigintHandler).toBeDefined();
+    input.write("Cancel me\n");
+    await output.waitFor("Assistant: partial");
+    processSigintHandler?.();
+    await output.waitFor("Response cancelled.\nYou: ");
+    input.write("/exit\n");
+    await running;
+
+    expect(
+      countOccurrences(output.read(), "Cancelling current response..."),
+    ).toBe(1);
+    expect(countOccurrences(output.read(), "Response cancelled.")).toBe(1);
+    expect(errors.read()).toBe("");
+    expect(process.listenerCount("SIGINT")).toBe(initialSigintListeners.size);
+  });
+
+  it("cleans up readline and process listeners after SIGTERM", async () => {
+    const input = new TestTerminalInput();
+    const output = captureStream(new TestTerminalOutput());
+    const errors = captureStream();
+    const initialInputEndListenerCount = input.listenerCount("end");
+    const initialSigintListenerCount = process.listenerCount("SIGINT");
+    const initialSigtermListeners = new Set(process.listeners("SIGTERM"));
+    const application = createApplication(
+      input,
+      createFakeEngine([]),
+      output.stream,
+      errors.stream,
+    );
+
+    const running = application.run();
+    await output.waitFor("You: ");
+    const readline = requireReadline(application);
+    const processSigtermHandler = process
+      .listeners("SIGTERM")
+      .find((listener) => !initialSigtermListeners.has(listener));
+    expect(processSigtermHandler).toBeDefined();
+    processSigtermHandler?.();
+    await running;
+
+    expect(readline.listenerCount("SIGINT")).toBe(0);
+    expect(input.listenerCount("end")).toBe(initialInputEndListenerCount);
+    expect(process.listenerCount("SIGINT")).toBe(initialSigintListenerCount);
+    expect(process.listenerCount("SIGTERM")).toBe(initialSigtermListeners.size);
+    expect(output.read()).not.toContain("Cancelling current response...");
+    expect(errors.read()).toBe("");
+  });
+
+  it("cleans up listeners when startup output throws", async () => {
+    const input = new TestTerminalInput();
+    const output = new TestTerminalOutput();
+    output.write = (() => {
+      throw new Error("controlled output failure");
+    }) as typeof output.write;
+    const errors = captureStream();
+    const initialInputEndListenerCount = input.listenerCount("end");
+    const initialSigintListenerCount = process.listenerCount("SIGINT");
+    const initialSigtermListenerCount = process.listenerCount("SIGTERM");
+    const application = createApplication(
+      input,
+      createFakeEngine([]),
+      output,
+      errors.stream,
+    );
+
+    const running = application.run();
+    const readline = requireReadline(application);
+    await expect(running).rejects.toThrow("controlled output failure");
+
+    expect(readline.listenerCount("SIGINT")).toBe(0);
+    expect(input.listenerCount("end")).toBe(initialInputEndListenerCount);
+    expect(process.listenerCount("SIGINT")).toBe(initialSigintListenerCount);
+    expect(process.listenerCount("SIGTERM")).toBe(initialSigtermListenerCount);
+  });
+
   it("streams two turns and carries completed history forward", async () => {
     const output = captureStream();
     const errors = captureStream();
