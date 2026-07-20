@@ -315,6 +315,158 @@ describe("Ollama tool response parsing", () => {
     ).toBe(true);
   });
 
+  it("accepts and omits validated Ollama tool-call metadata", async () => {
+    const response = await new OllamaClient({
+      fetch: createFetch({
+        model: "llama3.1:8b",
+        message: {
+          role: "assistant",
+          content: "",
+          tool_calls: [
+            {
+              id: "call-calculator",
+              function: {
+                index: 0,
+                name: "calculator",
+                arguments: {
+                  operation: "divide",
+                  left: 144,
+                  right: 12,
+                  nested: { values: [12] },
+                },
+              },
+            },
+            {
+              id: "call-weather",
+              function: {
+                index: 1,
+                name: "weather",
+                arguments: { city: "Warsaw" },
+              },
+            },
+          ],
+        },
+        done: true,
+      }),
+    }).chat(toolRequest);
+
+    expect(response.message?.toolCalls).toEqual([
+      {
+        function: {
+          name: "calculator",
+          arguments: {
+            operation: "divide",
+            left: 144,
+            right: 12,
+            nested: { values: [12] },
+          },
+        },
+      },
+      toolCall,
+    ]);
+    const calls = response.message?.toolCalls ?? [];
+    expect(calls[0]).not.toHaveProperty("id");
+    expect(calls[0]?.function).not.toHaveProperty("index");
+    expect(Object.isFrozen(calls)).toBe(true);
+    expect(Object.isFrozen(calls[0])).toBe(true);
+    expect(Object.isFrozen(calls[0]?.function)).toBe(true);
+    expect(Object.isFrozen(calls[0]?.function.arguments)).toBe(true);
+    expect(Object.isFrozen(calls[0]?.function.arguments.nested)).toBe(true);
+    expect(
+      Object.isFrozen(
+        (calls[0]?.function.arguments.nested as { values: unknown[] }).values,
+      ),
+    ).toBe(true);
+  });
+
+  it.each([
+    [
+      "empty id",
+      { id: "", function: toolCall.function },
+      ".id: must be a non-empty string",
+    ],
+    [
+      "non-string id",
+      { id: 42, function: toolCall.function },
+      ".id: must be a non-empty string",
+    ],
+    [
+      "negative index",
+      { function: { ...toolCall.function, index: -1 } },
+      ".function.index: must be a non-negative safe integer",
+    ],
+    [
+      "fractional index",
+      { function: { ...toolCall.function, index: 0.5 } },
+      ".function.index: must be a non-negative safe integer",
+    ],
+    [
+      "non-number index",
+      { function: { ...toolCall.function, index: "0" } },
+      ".function.index: must be a non-negative safe integer",
+    ],
+    [
+      "unsafe index",
+      {
+        function: {
+          ...toolCall.function,
+          index: Number.MAX_SAFE_INTEGER + 1,
+        },
+      },
+      ".function.index: must be a non-negative safe integer",
+    ],
+  ])("rejects %s metadata", async (_name, call, path) => {
+    await expect(
+      new OllamaClient({
+        fetch: createFetch({
+          model: "llama3.1:8b",
+          message: {
+            role: "assistant",
+            content: "",
+            tool_calls: [call],
+          },
+          done: true,
+        }),
+      }).chat(toolRequest),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        name: "OllamaResponseError",
+        endpoint: "/api/chat",
+        message: expect.stringContaining(`message.tool_calls[0]${path}`),
+      }),
+    );
+  });
+
+  it.each([
+    [
+      { function: toolCall.function, unexpected: true },
+      "message.tool_calls[0].unexpected: unknown property",
+    ],
+    [
+      { function: { ...toolCall.function, unexpected: true } },
+      "message.tool_calls[0].function.unexpected: unknown property",
+    ],
+  ])("still rejects unknown response metadata %#", async (call, detail) => {
+    await expect(
+      new OllamaClient({
+        fetch: createFetch({
+          model: "llama3.1:8b",
+          message: {
+            role: "assistant",
+            content: "",
+            tool_calls: [call],
+          },
+          done: true,
+        }),
+      }).chat(toolRequest),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        name: "OllamaResponseError",
+        message: expect.stringContaining(detail),
+      }),
+    );
+  });
+
   it.each([
     [null, "message.tool_calls: must be an array"],
     [[null], "message.tool_calls[0]: must be an object"],
@@ -386,6 +538,89 @@ describe("Ollama streaming tool response parsing", () => {
     };
     expect(Object.isFrozen(first.toolCalls)).toBe(true);
     expect(Object.isFrozen(first.toolCalls[0]?.function.arguments)).toBe(true);
+  });
+
+  it("accepts and omits tool-call metadata without changing completion", async () => {
+    const fetch = (async () =>
+      streamResponse([
+        `${JSON.stringify({
+          model: "llama3.1:8b",
+          message: {
+            role: "assistant",
+            content: "",
+            tool_calls: [
+              {
+                id: "call-calculator",
+                function: {
+                  index: 0,
+                  name: "calculator",
+                  arguments: { operation: "divide", left: 144, right: 12 },
+                },
+              },
+            ],
+          },
+          done: true,
+          done_reason: "stop",
+        })}\n`,
+      ])) as FetchImplementation;
+
+    const chunks = await collect(
+      new OllamaClient({ fetch }).chatStream(toolRequest),
+    );
+
+    expect(chunks).toEqual([
+      {
+        model: "llama3.1:8b",
+        message: {
+          role: "assistant",
+          content: "",
+          toolCalls: [
+            {
+              function: {
+                name: "calculator",
+                arguments: { operation: "divide", left: 144, right: 12 },
+              },
+            },
+          ],
+        },
+        done: true,
+        doneReason: "stop",
+      },
+    ]);
+    expect(chunks[0]?.message?.toolCalls?.[0]).not.toHaveProperty("id");
+    expect(chunks[0]?.message?.toolCalls?.[0]?.function).not.toHaveProperty(
+      "index",
+    );
+  });
+
+  it("rejects invalid streaming tool-call metadata with an indexed path", async () => {
+    const fetch = (async () =>
+      streamResponse([
+        `${JSON.stringify({
+          message: {
+            role: "assistant",
+            content: "",
+            tool_calls: [
+              {
+                id: "call-weather",
+                function: { ...toolCall.function, index: -1 },
+              },
+            ],
+          },
+          done: true,
+        })}\n`,
+      ])) as FetchImplementation;
+
+    await expect(
+      collect(new OllamaClient({ fetch }).chatStream(toolRequest)),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        name: "OllamaResponseError",
+        message: expect.stringContaining(
+          "stream[0].message.tool_calls[0].function.index: must be a non-negative safe integer",
+        ),
+      }),
+    );
   });
 
   it("reports the indexed path for malformed calls", async () => {

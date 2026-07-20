@@ -33,6 +33,12 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const CHAT_ROLES = new Set(["system", "user", "assistant", "tool"]);
 const MESSAGE_PROPERTIES = new Set(["role", "content", "toolCalls"]);
 const RESPONSE_MESSAGE_PROPERTIES = new Set(["role", "content", "tool_calls"]);
+const RESPONSE_TOOL_CALL_PROPERTIES = new Set(["function", "id"]);
+const RESPONSE_TOOL_CALL_FUNCTION_PROPERTIES = new Set([
+  "name",
+  "arguments",
+  "index",
+]);
 
 export class OllamaClient {
   private readonly baseUrl: string;
@@ -607,17 +613,28 @@ function snapshotToolCall(
     details.push(`${path}: must be an object`);
     return undefined;
   }
-  rejectUnknownProperties(value, new Set(["function"]), path, details);
+  rejectUnknownProperties(value, RESPONSE_TOOL_CALL_PROPERTIES, path, details);
+  if (value.id !== undefined && !isNonEmptyString(value.id)) {
+    details.push(`${path}.id: must be a non-empty string`);
+  }
   if (!isRecord(value.function)) {
     details.push(`${path}.function: must be an object`);
     return undefined;
   }
   rejectUnknownProperties(
     value.function,
-    new Set(["name", "arguments"]),
+    RESPONSE_TOOL_CALL_FUNCTION_PROPERTIES,
     `${path}.function`,
     details,
   );
+  if (
+    value.function.index !== undefined &&
+    (typeof value.function.index !== "number" ||
+      !Number.isSafeInteger(value.function.index) ||
+      value.function.index < 0)
+  ) {
+    details.push(`${path}.function.index: must be a non-negative safe integer`);
+  }
   if (!isNonEmptyString(value.function.name)) {
     details.push(`${path}.function.name: must be a non-empty string`);
   }

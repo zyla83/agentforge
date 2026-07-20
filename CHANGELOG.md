@@ -49,6 +49,8 @@ The first AgentForge MVP baseline. No release date or tag has been created.
 ### Fixed
 
 - Interactive readline `SIGINT` now reaches active-response cancellation on Windows
+- Ollama tool responses accept validated `id` and function `index` metadata
+  without changing provider-neutral call IDs
 - MVP package smoke checks now resolve TypeScript and runtime imports through real
   workspace package manifests instead of direct `dist` paths
 - Semantic version validation rejects whitespace and underscores
