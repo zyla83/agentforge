@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import {
   DEFAULT_SPOTIFY_REDIRECT_URI,
+  SPOTIFY_MODIFY_PLAYBACK_SCOPE,
   SPOTIFY_PLAYBACK_SCOPE,
+  SPOTIFY_PLAYBACK_SCOPES,
   SpotifyAbortError,
   SpotifyAuthenticationError,
   SpotifyAuthorizationSession,
@@ -60,7 +62,7 @@ describe("Spotify Authorization Code with PKCE", () => {
           token_type: "Bearer",
           expires_in: 3600,
           refresh_token: "refresh-value",
-          scope: SPOTIFY_PLAYBACK_SCOPE,
+          scope: SPOTIFY_PLAYBACK_SCOPES.join(" "),
         });
       },
     );
@@ -89,7 +91,7 @@ describe("Spotify Authorization Code with PKCE", () => {
       "https://accounts.spotify.com/authorize",
     );
     expect(authorizationUrl?.searchParams.get("scope")).toBe(
-      SPOTIFY_PLAYBACK_SCOPE,
+      SPOTIFY_PLAYBACK_SCOPES.join(" "),
     );
     expect(authorizationUrl?.searchParams.get("response_type")).toBe("code");
     expect(authorizationUrl?.searchParams.get("code_challenge_method")).toBe(
@@ -106,7 +108,7 @@ describe("Spotify Authorization Code with PKCE", () => {
     expect(store.saved).toEqual({
       version: 1,
       refreshToken: "refresh-value",
-      scopes: [SPOTIFY_PLAYBACK_SCOPE],
+      scopes: SPOTIFY_PLAYBACK_SCOPES,
     });
     expect(Object.keys(store.saved ?? {}).sort()).toEqual([
       "refreshToken",
@@ -177,7 +179,7 @@ describe("Spotify Authorization Code with PKCE", () => {
         token_type: "Bearer",
         expires_in: 3600,
         refresh_token: "refresh",
-        scope: SPOTIFY_PLAYBACK_SCOPE,
+        scope: SPOTIFY_PLAYBACK_SCOPES.join(" "),
       }),
     );
     const session = new SpotifyAuthorizationSession({
@@ -272,7 +274,7 @@ describe("Spotify Authorization Code with PKCE", () => {
     const store = createMemoryStore({
       version: 1,
       refreshToken: "refresh",
-      scopes: [SPOTIFY_PLAYBACK_SCOPE],
+      scopes: SPOTIFY_PLAYBACK_SCOPES,
     });
     let markStarted: (() => void) | undefined;
     const started = new Promise<void>((resolve) => {
@@ -307,7 +309,7 @@ describe("Spotify Authorization Code with PKCE", () => {
     const store = createMemoryStore({
       version: 1,
       refreshToken: "old-refresh",
-      scopes: [SPOTIFY_PLAYBACK_SCOPE],
+      scopes: SPOTIFY_PLAYBACK_SCOPES,
     });
     let release: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => {
@@ -320,7 +322,7 @@ describe("Spotify Authorization Code with PKCE", () => {
         token_type: "Bearer",
         expires_in: 60,
         refresh_token: "rotated-refresh",
-        scope: SPOTIFY_PLAYBACK_SCOPE,
+        scope: SPOTIFY_PLAYBACK_SCOPES.join(" "),
       });
     });
     const session = new SpotifyAuthorizationSession({
@@ -348,18 +350,167 @@ describe("Spotify Authorization Code with PKCE", () => {
         access_token: "second-access",
         token_type: "Bearer",
         expires_in: 60,
-        scope: SPOTIFY_PLAYBACK_SCOPE,
+        scope: SPOTIFY_PLAYBACK_SCOPES.join(" "),
       }),
     );
     await expect(session.getAccessToken()).resolves.toBe("second-access");
     expect(store.saved?.refreshToken).toBe("rotated-refresh");
   });
 
+  it("migrates a legacy read-only credential through one authorization and persists canonical scopes", async () => {
+    const port = 45144;
+    const redirectUri = `http://127.0.0.1:${port}/callback`;
+    const legacyCredential = {
+      version: 1 as const,
+      refreshToken: "legacy-refresh",
+      scopes: Object.freeze([SPOTIFY_PLAYBACK_SCOPE]),
+    };
+    const store = createMemoryStore(legacyCredential);
+    const tokenFetch = vi.fn(async (_input, init) => {
+      const body = init?.body as URLSearchParams;
+      expect(body.get("grant_type")).toBe("authorization_code");
+      expect(body.get("refresh_token")).toBeNull();
+      return Response.json({
+        access_token: "migrated-access",
+        token_type: "Bearer",
+        expires_in: 3600,
+        refresh_token: "migrated-refresh",
+        scope: `${SPOTIFY_MODIFY_PLAYBACK_SCOPE} ${SPOTIFY_PLAYBACK_SCOPE}`,
+      });
+    });
+    let authorizationCount = 0;
+    const session = new SpotifyAuthorizationSession({
+      clientId: "client-id",
+      redirectUri,
+      credentialStore: store,
+      fetch: tokenFetch,
+      random: (size) => new Uint8Array(size).fill(8),
+      onAuthorizationUrl: (authorizationUrl) => {
+        authorizationCount += 1;
+        expect(new URL(authorizationUrl).searchParams.get("scope")).toBe(
+          SPOTIFY_PLAYBACK_SCOPES.join(" "),
+        );
+        const state = new URL(authorizationUrl).searchParams.get("state") ?? "";
+        void fetch(
+          `${redirectUri}?code=migration-code&state=${encodeURIComponent(state)}`,
+        );
+      },
+    });
+
+    await expect(session.getAccessToken()).resolves.toBe("migrated-access");
+    expect(authorizationCount).toBe(1);
+    expect(tokenFetch).toHaveBeenCalledTimes(1);
+    expect(store.saved).toEqual({
+      version: 1,
+      refreshToken: "migrated-refresh",
+      scopes: [...SPOTIFY_PLAYBACK_SCOPES],
+    });
+
+    const restartedFetch = vi.fn(async (_input, init) => {
+      expect((init?.body as URLSearchParams).get("grant_type")).toBe(
+        "refresh_token",
+      );
+      return Response.json({
+        access_token: "restarted-access",
+        token_type: "Bearer",
+        expires_in: 3600,
+        scope: SPOTIFY_PLAYBACK_SCOPES.join(" "),
+      });
+    });
+    const restarted = new SpotifyAuthorizationSession({
+      clientId: "client-id",
+      credentialStore: store,
+      fetch: restartedFetch,
+      onAuthorizationUrl: () => {
+        throw new Error("authorization should not run after migration");
+      },
+    });
+    await expect(restarted.getAccessToken()).resolves.toBe("restarted-access");
+    expect(restartedFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves a legacy credential when migration authorization is denied", async () => {
+    const port = 45145;
+    const redirectUri = `http://127.0.0.1:${port}/callback`;
+    const legacyCredential = Object.freeze({
+      version: 1 as const,
+      refreshToken: "legacy-refresh",
+      scopes: Object.freeze([SPOTIFY_PLAYBACK_SCOPE]),
+    });
+    const store = createMemoryStore(legacyCredential);
+    const save = vi.spyOn(store, "save");
+    const session = new SpotifyAuthorizationSession({
+      clientId: "client-id",
+      redirectUri,
+      credentialStore: store,
+      random: (size) => new Uint8Array(size).fill(9),
+      onAuthorizationUrl: (authorizationUrl) => {
+        const state = new URL(authorizationUrl).searchParams.get("state") ?? "";
+        void fetch(
+          `${redirectUri}?error=access_denied&state=${encodeURIComponent(state)}`,
+        );
+      },
+    });
+
+    await expect(session.getAccessToken()).rejects.toBeInstanceOf(
+      SpotifyAuthenticationError,
+    );
+    expect(save).not.toHaveBeenCalled();
+    expect(store.saved).toBe(legacyCredential);
+  });
+
+  it.each([
+    [SPOTIFY_PLAYBACK_SCOPE, "missing modify", 45146],
+    [SPOTIFY_MODIFY_PLAYBACK_SCOPE, "missing read", 45147],
+    [
+      `${SPOTIFY_PLAYBACK_SCOPES.join(" ")} playlist-read-private`,
+      "unknown",
+      45148,
+    ],
+    [
+      `${SPOTIFY_PLAYBACK_SCOPE} ${SPOTIFY_MODIFY_PLAYBACK_SCOPE} ${SPOTIFY_PLAYBACK_SCOPE}`,
+      "duplicate",
+      45149,
+    ],
+  ])(
+    "rejects invalid granted scope sets (%s: %s)",
+    async (scope, _case, port) => {
+      const redirectUri = `http://127.0.0.1:${port}/callback`;
+      const store = createMemoryStore();
+      const session = new SpotifyAuthorizationSession({
+        clientId: "client-id",
+        redirectUri,
+        credentialStore: store,
+        fetch: async () =>
+          Response.json({
+            access_token: "secret-access",
+            token_type: "Bearer",
+            expires_in: 3600,
+            refresh_token: "secret-refresh",
+            scope,
+          }),
+        random: (size) => new Uint8Array(size).fill(10),
+        onAuthorizationUrl: (authorizationUrl) => {
+          const state =
+            new URL(authorizationUrl).searchParams.get("state") ?? "";
+          void fetch(
+            `${redirectUri}?code=invalid-scope&state=${encodeURIComponent(state)}`,
+          );
+        },
+      });
+      const error = await session.getAccessToken().catch((value) => value);
+      expect(error).toBeInstanceOf(SpotifyResponseError);
+      expect(error.message).not.toContain("secret-access");
+      expect(error.message).not.toContain("secret-refresh");
+      expect(store.saved).toBeUndefined();
+    },
+  );
+
   it("rejects malformed token responses without exposing secret values", async () => {
     const store = createMemoryStore({
       version: 1,
       refreshToken: "never-print-this",
-      scopes: [SPOTIFY_PLAYBACK_SCOPE],
+      scopes: SPOTIFY_PLAYBACK_SCOPES,
     });
     const session = new SpotifyAuthorizationSession({
       clientId: "client-id",

@@ -24,13 +24,20 @@ import {
 } from "@agentforge/provider-sdk";
 import { AgentForgeError } from "@agentforge/shared";
 import {
+  SPOTIFY_MODIFY_PLAYBACK_SCOPE,
+  SPOTIFY_PLAYBACK_SCOPE,
+  SPOTIFY_PLAYBACK_SCOPES,
   SpotifyAuthorizationSession,
   SpotifyClient,
 } from "@agentforge/spotify-client";
 import type {
+  SpotifyAvailableDevice,
+  SpotifyAvailableDevices,
   SpotifyPlaylistSearchItem,
   SpotifyPlaylistSearchResult,
   SpotifySearchRequestOptions,
+  SpotifyStartPlaybackRequest,
+  SpotifyStartPlaybackResult,
   SpotifyTrackSearchItem,
   SpotifyTrackSearchResult,
 } from "@agentforge/spotify-client";
@@ -46,9 +53,13 @@ interface PublicTypeImports {
   readonly observability: ConversationEngineObservabilityOptions;
   readonly plugin: Plugin;
   readonly provider: LLMProvider;
+  readonly spotifyAvailableDevice: SpotifyAvailableDevice;
+  readonly spotifyAvailableDevices: SpotifyAvailableDevices;
   readonly spotifyPlaylistSearchItem: SpotifyPlaylistSearchItem;
   readonly spotifyPlaylistSearchResult: SpotifyPlaylistSearchResult;
   readonly spotifySearchOptions: SpotifySearchRequestOptions;
+  readonly spotifyStartPlaybackRequest: SpotifyStartPlaybackRequest;
+  readonly spotifyStartPlaybackResult: SpotifyStartPlaybackResult;
   readonly spotifyTrackSearchItem: SpotifyTrackSearchItem;
   readonly spotifyTrackSearchResult: SpotifyTrackSearchResult;
   readonly toolEvent: ToolExecutionObserverEvent;
@@ -74,6 +85,9 @@ void [
   AgentForgeError,
   SpotifyAuthorizationSession,
   SpotifyClient,
+  SPOTIFY_PLAYBACK_SCOPE,
+  SPOTIFY_MODIFY_PLAYBACK_SCOPE,
+  SPOTIFY_PLAYBACK_SCOPES,
   FilesystemConversationStore,
   createFilesystemConversationStore,
   publicTypeImports,

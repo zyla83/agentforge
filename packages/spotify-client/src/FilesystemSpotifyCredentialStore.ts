@@ -13,6 +13,7 @@ import {
   isRecord,
   rejectUnknown,
 } from "./internal.js";
+import { normalizeSpotifyScopes } from "./scopes.js";
 import type {
   SpotifyRefreshCredential,
   SpotifyRefreshCredentialStore,
@@ -150,22 +151,18 @@ function validateCredential(
     details.push("document.version: unsupported version");
   if (!isNonEmptyString(value.refreshToken))
     details.push("document.refreshToken: must be a non-empty string");
-  const scopes: string[] = [];
+  let scopes: readonly string[] | undefined;
   if (!Array.isArray(value.scopes) || value.scopes.length === 0) {
     details.push("document.scopes: must be a non-empty array");
   } else {
-    value.scopes.forEach((scope, index) => {
-      if (!isNonEmptyString(scope))
-        details.push(`document.scopes[${index}]: must be a non-empty string`);
-      else scopes.push(scope);
-    });
-  }
-  if (scopes.length !== 1 || scopes[0] !== "user-read-playback-state") {
-    details.push(
-      "document.scopes: must contain exactly user-read-playback-state",
+    scopes = normalizeSpotifyScopes(
+      value.scopes,
+      "document.scopes",
+      details,
+      true,
     );
   }
-  if (details.length > 0) throw new ErrorType(details);
+  if (details.length > 0 || scopes === undefined) throw new ErrorType(details);
   return deepFreeze({
     version: 1,
     refreshToken: value.refreshToken as string,

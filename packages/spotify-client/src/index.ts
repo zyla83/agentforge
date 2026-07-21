@@ -5,10 +5,14 @@ export type {
 } from "./FilesystemSpotifyCredentialStore.js";
 export {
   DEFAULT_SPOTIFY_REDIRECT_URI,
-  SPOTIFY_PLAYBACK_SCOPE,
   SpotifyAuthorizationSession,
   validateSpotifyRedirectUri,
 } from "./SpotifyAuthorizationSession.js";
+export {
+  SPOTIFY_MODIFY_PLAYBACK_SCOPE,
+  SPOTIFY_PLAYBACK_SCOPE,
+  SPOTIFY_PLAYBACK_SCOPES,
+} from "./scopes.js";
 export type {
   SpotifyAuthorizationSessionOptions,
   SpotifyRedirectTarget,
@@ -32,6 +36,8 @@ export {
 } from "./errors.js";
 export type {
   SpotifyAccessTokenSource,
+  SpotifyAvailableDevice,
+  SpotifyAvailableDevices,
   SpotifyCurrentPlayback,
   SpotifyFetch,
   SpotifyIdlePlayback,
@@ -44,6 +50,8 @@ export type {
   SpotifyRefreshCredentialStore,
   SpotifyRequestOptions,
   SpotifySearchRequestOptions,
+  SpotifyStartPlaybackRequest,
+  SpotifyStartPlaybackResult,
   SpotifyTrackSearchItem,
   SpotifyTrackSearchResult,
 } from "./types.js";

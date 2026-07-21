@@ -57,12 +57,30 @@ for (const [packageName, packageModule, expectedExports] of packageChecks) {
   }
 }
 
-for (const methodName of ["searchTracks", "searchPlaylists"]) {
+for (const methodName of [
+  "searchTracks",
+  "searchPlaylists",
+  "getAvailableDevices",
+  "startPlayback",
+]) {
   if (typeof spotifyClient.SpotifyClient.prototype[methodName] !== "function") {
     throw new Error(
       `Package "@agentforge/spotify-client" does not expose SpotifyClient.${methodName}().`,
     );
   }
+}
+
+if (
+  spotifyClient.SPOTIFY_PLAYBACK_SCOPE !== "user-read-playback-state" ||
+  spotifyClient.SPOTIFY_MODIFY_PLAYBACK_SCOPE !==
+    "user-modify-playback-state" ||
+  !Object.isFrozen(spotifyClient.SPOTIFY_PLAYBACK_SCOPES) ||
+  spotifyClient.SPOTIFY_PLAYBACK_SCOPES.join(" ") !==
+    "user-read-playback-state user-modify-playback-state"
+) {
+  throw new Error(
+    'Package "@agentforge/spotify-client" does not expose canonical playback scopes.',
+  );
 }
 
 console.log(

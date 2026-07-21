@@ -5,11 +5,15 @@ import {
 } from "@agentforge/spotify-client";
 import { describe, expect, it, vi } from "vitest";
 import {
+  createSpotifyAvailableDevicesToolHandler,
   createSpotifyCurrentPlaybackToolHandler,
   createSpotifyPlaylistSearchToolHandler,
+  createSpotifyStartPlaybackToolHandler,
   createSpotifyTrackSearchToolHandler,
+  spotifyAvailableDevicesToolDefinition,
   spotifyCurrentPlaybackToolDefinition,
   spotifyPlaylistSearchToolDefinition,
+  spotifyStartPlaybackToolDefinition,
   spotifyTrackSearchToolDefinition,
 } from "../../../examples/chat-cli/src/spotifyTools.js";
 
@@ -177,6 +181,141 @@ describe("Spotify search tools", () => {
     ).rejects.toBe(error);
     expect(searchPlaylists).toHaveBeenCalledTimes(1);
     expect(argumentsValue).toEqual({ query: "Focus", limit: 1 });
+  });
+});
+
+describe("Spotify device and playback-start tools", () => {
+  it("defines the exact immutable available-devices contract", () => {
+    expect(spotifyAvailableDevicesToolDefinition).toEqual({
+      name: "spotify_get_available_devices",
+      description: expect.stringMatching(/read.*devices.*does not modify/iu),
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+    });
+    expect(Object.isFrozen(spotifyAvailableDevicesToolDefinition)).toBe(true);
+    expect(
+      Object.isFrozen(spotifyAvailableDevicesToolDefinition.inputSchema),
+    ).toBe(true);
+  });
+
+  it("defines the exact immutable side-effecting start-playback contract", () => {
+    expect(spotifyStartPlaybackToolDefinition).toEqual({
+      name: "spotify_start_playback",
+      description: expect.stringMatching(
+        /change.*Spotify playback.*starting.*track or playlist.*external side effect/iu,
+      ),
+      inputSchema: {
+        type: "object",
+        properties: {
+          uri: { type: "string", minLength: 1, maxLength: 256 },
+          deviceId: { type: "string", minLength: 1, maxLength: 256 },
+        },
+        required: ["uri"],
+        additionalProperties: false,
+      },
+    });
+    expect(Object.isFrozen(spotifyStartPlaybackToolDefinition)).toBe(true);
+    expect(
+      Object.isFrozen(spotifyStartPlaybackToolDefinition.inputSchema),
+    ).toBe(true);
+  });
+
+  it("lists devices once, forwards cancellation, and returns the client snapshot", async () => {
+    const controller = new AbortController();
+    const result = deepFreeze({
+      devices: [
+        {
+          id: "device",
+          name: "Desktop",
+          type: "Computer",
+          isActive: true,
+          isRestricted: false,
+          supportsVolume: true,
+        },
+      ],
+    });
+    const getAvailableDevices = vi.fn(async () => result);
+    const handler = createSpotifyAvailableDevicesToolHandler({
+      getAvailableDevices,
+    });
+    await expect(
+      handler(
+        Object.freeze({}),
+        createToolExecutionContext({ signal: controller.signal }),
+      ),
+    ).resolves.toBe(result);
+    expect(getAvailableDevices).toHaveBeenCalledTimes(1);
+    expect(getAvailableDevices).toHaveBeenCalledWith({
+      signal: controller.signal,
+    });
+  });
+
+  it.each([
+    [{ uri: "spotify:track:Track123" }, { uri: "spotify:track:Track123" }],
+    [
+      { uri: "spotify:playlist:List123", deviceId: "device-id" },
+      { uri: "spotify:playlist:List123", deviceId: "device-id" },
+    ],
+  ])(
+    "starts one validated selection without mutating arguments",
+    async (input, expected) => {
+      const controller = new AbortController();
+      const result = deepFreeze({
+        status: "accepted" as const,
+        itemType: input.uri.includes(":track:")
+          ? ("track" as const)
+          : ("playlist" as const),
+        uri: input.uri,
+        ...(input.deviceId === undefined ? {} : { deviceId: input.deviceId }),
+      });
+      const startPlayback = vi.fn(async () => result);
+      const handler = createSpotifyStartPlaybackToolHandler({ startPlayback });
+      const argumentsValue = deepFreeze({ ...input });
+      await expect(
+        handler(
+          argumentsValue,
+          createToolExecutionContext({ signal: controller.signal }),
+        ),
+      ).resolves.toBe(result);
+      expect(startPlayback).toHaveBeenCalledTimes(1);
+      expect(startPlayback).toHaveBeenCalledWith(expected, {
+        signal: controller.signal,
+      });
+      expect(argumentsValue).toEqual(input);
+    },
+  );
+
+  it.each([
+    {},
+    { uri: "" },
+    { uri: " spotify:track:abc" },
+    { uri: "spotify:album:abc" },
+    { uri: "spotify:track:abc:def" },
+    { uri: "spotify:track:abc", deviceId: " " },
+    { uri: "spotify:track:abc", deviceId: "device\n" },
+    { uri: "spotify:track:abc", extra: true },
+  ])("rejects invalid start arguments before client work", async (input) => {
+    const startPlayback = vi.fn();
+    const handler = createSpotifyStartPlaybackToolHandler({ startPlayback });
+    await expect(
+      handler(input as never, createToolExecutionContext()),
+    ).rejects.toMatchObject({ name: "SpotifyRequestError" });
+    expect(startPlayback).not.toHaveBeenCalled();
+  });
+
+  it("propagates a typed playback failure without retry", async () => {
+    const error = new SpotifyAuthenticationError();
+    const startPlayback = vi.fn(async () => {
+      throw error;
+    });
+    const handler = createSpotifyStartPlaybackToolHandler({ startPlayback });
+    await expect(
+      handler({ uri: "spotify:track:abc" }, createToolExecutionContext()),
+    ).rejects.toBe(error);
+    expect(startPlayback).toHaveBeenCalledTimes(1);
   });
 });
 

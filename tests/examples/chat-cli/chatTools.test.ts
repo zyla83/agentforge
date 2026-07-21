@@ -16,6 +16,16 @@ describe("chat tool startup configuration", () => {
         Object.freeze({ query, results: Object.freeze([]) }),
       searchPlaylists: async (query: string) =>
         Object.freeze({ query, results: Object.freeze([]) }),
+      getAvailableDevices: async () =>
+        Object.freeze({ devices: Object.freeze([]) }),
+      startPlayback: async (request: { uri: string; deviceId?: string }) =>
+        Object.freeze({
+          status: "accepted" as const,
+          itemType: request.uri.includes(":track:")
+            ? ("track" as const)
+            : ("playlist" as const),
+          ...request,
+        }),
     } as SpotifyClient,
   };
   it("keeps tools absent and disabled in off mode", () => {
@@ -45,7 +55,7 @@ describe("chat tool startup configuration", () => {
     expect(() => registerConfiguredChatTools(agent, tools)).toThrow();
   });
 
-  it("registers exactly the three Spotify tools in canonical order", () => {
+  it("registers exactly the five Spotify tools in canonical order", () => {
     const agent = new AgentForge();
     const tools = createChatToolOptions("spotify", spotify);
     registerConfiguredChatTools(agent, tools, spotify);
@@ -53,6 +63,8 @@ describe("chat tool startup configuration", () => {
       "spotify_get_current_playback",
       "spotify_search_tracks",
       "spotify_search_playlists",
+      "spotify_get_available_devices",
+      "spotify_start_playback",
     ]);
     expect(
       agent.getRegisteredToolDefinitions().map(({ name }) => name),
@@ -60,6 +72,8 @@ describe("chat tool startup configuration", () => {
       "spotify_get_current_playback",
       "spotify_search_tracks",
       "spotify_search_playlists",
+      "spotify_get_available_devices",
+      "spotify_start_playback",
     ]);
   });
 

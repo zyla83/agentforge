@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   FilesystemSpotifyCredentialStore,
+  SPOTIFY_PLAYBACK_SCOPE,
+  SPOTIFY_PLAYBACK_SCOPES,
   SpotifyCredentialStoreCorruptionError,
   SpotifyCredentialStoreInitializationError,
   SpotifyCredentialStoreIoError,
@@ -13,7 +15,7 @@ const directories: string[] = [];
 const credential = {
   version: 1 as const,
   refreshToken: "sensitive-refresh-value",
-  scopes: ["user-read-playback-state"],
+  scopes: SPOTIFY_PLAYBACK_SCOPES,
 };
 
 afterEach(async () => {
@@ -54,6 +56,43 @@ describe("FilesystemSpotifyCredentialStore", () => {
       "version",
     ]);
     expect(JSON.stringify(persisted)).not.toContain("accessToken");
+  });
+
+  it("decodes a legacy read-only credential without upgrading it", async () => {
+    const directory = await temporaryDirectory();
+    const store = new FilesystemSpotifyCredentialStore({ directory });
+    await writeFile(
+      store.filePath,
+      JSON.stringify({
+        version: 1,
+        refreshToken: "legacy-refresh",
+        scopes: [SPOTIFY_PLAYBACK_SCOPE],
+      }),
+      "utf8",
+    );
+
+    const loaded = await store.load();
+    expect(loaded).toEqual({
+      version: 1,
+      refreshToken: "legacy-refresh",
+      scopes: [SPOTIFY_PLAYBACK_SCOPE],
+    });
+    expect(Object.isFrozen(loaded?.scopes)).toBe(true);
+  });
+
+  it("canonicalizes a complete scope set before persistence", async () => {
+    const directory = await temporaryDirectory();
+    const store = new FilesystemSpotifyCredentialStore({ directory });
+    await store.save({
+      version: 1,
+      refreshToken: "refresh",
+      scopes: [...SPOTIFY_PLAYBACK_SCOPES].reverse(),
+    });
+    await expect(store.load()).resolves.toEqual({
+      version: 1,
+      refreshToken: "refresh",
+      scopes: [...SPOTIFY_PLAYBACK_SCOPES],
+    });
   });
 
   it("replaces a rotated refresh credential", async () => {
@@ -101,6 +140,14 @@ describe("FilesystemSpotifyCredentialStore", () => {
         scopes: ["playlist-read-private"],
       }),
       "document.scopes",
+    ],
+    [
+      JSON.stringify({
+        version: 1,
+        refreshToken: "x",
+        scopes: [SPOTIFY_PLAYBACK_SCOPE, SPOTIFY_PLAYBACK_SCOPE],
+      }),
+      "duplicate scope",
     ],
   ])(
     "rejects malformed persisted documents without exposing values",

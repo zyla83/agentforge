@@ -12,6 +12,12 @@
   a maximum limit of 10, and no automatic pagination
 - Read-only `spotify_search_tracks` and `spotify_search_playlists` tools in
   Spotify chat mode without additional OAuth scopes
+- Immutable Spotify Connect device inspection and constrained track or playlist
+  playback start through `@agentforge/spotify-client`
+- `spotify_get_available_devices` and side-effecting `spotify_start_playback`
+  tools, bringing Spotify mode to five explicitly registered tools
+- Canonical read and modify playback scopes with one-time PKCE migration for
+  legacy read-only refresh credentials
 
 ### Security
 
@@ -23,6 +29,9 @@
 - Spotify search terms and normalized catalog results may be visible to the
   model or persisted in conversation history; observer redaction does not alter
   model-visible or persisted values
+- Playback start runs with the authenticated user's Spotify permissions, is not
+  retried after ambiguous failures, is not rolled back, and an `accepted`
+  acknowledgement does not independently prove audible playback
 
 ## v0.1.0 (2026-07-20)
 

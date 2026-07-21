@@ -52,6 +52,13 @@ describe("chat CLI Spotify tool integration", () => {
           deepFreeze({ query, results: [] }),
         searchPlaylists: async (query: string) =>
           deepFreeze({ query, results: [] }),
+        getAvailableDevices: async () => deepFreeze({ devices: [] }),
+        startPlayback: async (request: { uri: string }) =>
+          deepFreeze({
+            status: "accepted" as const,
+            itemType: "track" as const,
+            uri: request.uri,
+          }),
       } as SpotifyClient,
     };
     const agent = new AgentForge();
@@ -115,9 +122,11 @@ describe("chat CLI Spotify tool integration", () => {
         "spotify_get_current_playback",
         "spotify_search_tracks",
         "spotify_search_playlists",
+        "spotify_get_available_devices",
+        "spotify_start_playback",
       ]);
       expect(output.read()).toContain(
-        "Tools: spotify (spotify_get_current_playback, spotify_search_tracks, spotify_search_playlists)",
+        "Tools: spotify (spotify_get_current_playback, spotify_search_tracks, spotify_search_playlists, spotify_get_available_devices, spotify_start_playback)",
       );
       expect(errors.read()).toBe("");
     } finally {
@@ -157,6 +166,13 @@ describe("chat CLI Spotify tool integration", () => {
           Object.freeze({ status: "idle" as const }),
         searchTracks,
         searchPlaylists,
+        getAvailableDevices: async () => deepFreeze({ devices: [] }),
+        startPlayback: async (request: { uri: string }) =>
+          deepFreeze({
+            status: "accepted" as const,
+            itemType: "track" as const,
+            uri: request.uri,
+          }),
       } as SpotifyClient,
     };
     const agent = new AgentForge();
@@ -214,6 +230,8 @@ describe("chat CLI Spotify tool integration", () => {
         "spotify_get_current_playback",
         "spotify_search_tracks",
         "spotify_search_playlists",
+        "spotify_get_available_devices",
+        "spotify_start_playback",
       ]);
       const trackResult = provider.requests[1]?.messages.find(
         (message) => message.role === LLMMessageRole.Tool,

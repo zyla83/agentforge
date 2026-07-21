@@ -44,7 +44,8 @@ const HELP_TEXT = `Commands:
 
 Tool configuration:
   Set AGENTFORGE_CHAT_TOOLS=example to enable the bundled example tools.
-  Set AGENTFORGE_CHAT_TOOLS=spotify for read-only playback and catalog inspection.
+  Set AGENTFORGE_CHAT_TOOLS=spotify for Spotify inspection, search, and playback start.
+  Spotify mode includes an external side-effect tool that can start a track or playlist.
   Available: calculator, format_text, lookup_inventory
 `;
 

@@ -15,6 +15,11 @@ import {
   isRecord,
   validateTimeout,
 } from "./internal.js";
+import {
+  SPOTIFY_PLAYBACK_SCOPES,
+  hasRequiredSpotifyScopes,
+  normalizeSpotifyScopes,
+} from "./scopes.js";
 import type {
   SpotifyFetch,
   SpotifyRefreshCredential,
@@ -22,7 +27,6 @@ import type {
   SpotifyRequestOptions,
 } from "./types.js";
 
-export const SPOTIFY_PLAYBACK_SCOPE = "user-read-playback-state" as const;
 export const DEFAULT_SPOTIFY_REDIRECT_URI =
   "http://127.0.0.1:43821/callback" as const;
 
@@ -160,7 +164,10 @@ export class SpotifyAuthorizationSession {
       Pick<SpotifyRequestOptions, "signal">,
   ): Promise<string> {
     const credential = await this.store.load();
-    if (credential !== undefined) {
+    if (
+      credential !== undefined &&
+      hasRequiredSpotifyScopes(credential.scopes)
+    ) {
       try {
         return await this.refresh(credential, options);
       } catch (error) {
@@ -203,7 +210,7 @@ export class SpotifyAuthorizationSession {
     url.search = new URLSearchParams({
       response_type: "code",
       client_id: this.clientId,
-      scope: SPOTIFY_PLAYBACK_SCOPE,
+      scope: SPOTIFY_PLAYBACK_SCOPES.join(" "),
       redirect_uri: this.redirect.uri,
       code_challenge_method: "S256",
       code_challenge: challenge,
@@ -414,12 +421,17 @@ function parseTokenResponse(value: unknown): TokenResponse {
     details.push("body.refresh_token: must be a non-empty string when present");
   if (!isNonEmptyString(value.scope))
     details.push("body.scope: must be a non-empty string");
-  const scopes = isNonEmptyString(value.scope)
+  const rawScopes = isNonEmptyString(value.scope)
     ? value.scope.split(/\s+/u).filter(Boolean)
     : [];
-  if (scopes.length !== 1 || scopes[0] !== SPOTIFY_PLAYBACK_SCOPE)
-    details.push(`body.scope: must grant exactly ${SPOTIFY_PLAYBACK_SCOPE}`);
-  if (details.length > 0) throw new SpotifyResponseError("token", details);
+  const scopes = normalizeSpotifyScopes(
+    rawScopes,
+    "body.scope",
+    details,
+    false,
+  );
+  if (details.length > 0 || scopes === undefined)
+    throw new SpotifyResponseError("token", details);
   return deepFreeze({
     accessToken: value.access_token as string,
     expiresIn: value.expires_in as number,

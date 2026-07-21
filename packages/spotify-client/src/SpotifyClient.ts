@@ -12,10 +12,13 @@ import {
   deepFreeze,
   isNonEmptyString,
   isRecord,
+  rejectUnknown,
   validateTimeout,
 } from "./internal.js";
 import type {
   SpotifyAccessTokenSource,
+  SpotifyAvailableDevice,
+  SpotifyAvailableDevices,
   SpotifyCurrentPlayback,
   SpotifyFetch,
   SpotifyPlaybackDevice,
@@ -24,6 +27,8 @@ import type {
   SpotifyPlaylistSearchResult,
   SpotifyRequestOptions,
   SpotifySearchRequestOptions,
+  SpotifyStartPlaybackRequest,
+  SpotifyStartPlaybackResult,
   SpotifyTrackSearchItem,
   SpotifyTrackSearchResult,
 } from "./types.js";
@@ -32,9 +37,14 @@ const DEFAULT_API_BASE_URL = "https://api.spotify.com";
 const DEFAULT_TIMEOUT_MS = 30_000;
 const CURRENT_PLAYBACK_ENDPOINT = "/v1/me/player";
 const SEARCH_ENDPOINT = "/v1/search";
+const DEVICES_ENDPOINT = "/v1/me/player/devices";
+const START_PLAYBACK_ENDPOINT = "/v1/me/player/play";
 const DEFAULT_SEARCH_LIMIT = 5;
 const MAXIMUM_SEARCH_LIMIT = 10;
 const MAXIMUM_SEARCH_QUERY_LENGTH = 200;
+const MAXIMUM_SPOTIFY_URI_LENGTH = 256;
+const MAXIMUM_DEVICE_ID_LENGTH = 256;
+const START_PLAYBACK_PROPERTIES = new Set(["uri", "deviceId"]);
 
 export interface SpotifyClientOptions {
   readonly accessTokenSource: SpotifyAccessTokenSource;
@@ -184,6 +194,190 @@ export class SpotifyClient {
     return parsePlaylistSearch(body, request.query);
   }
 
+  async getAvailableDevices(
+    options: SpotifyRequestOptions = {},
+  ): Promise<SpotifyAvailableDevices> {
+    const request = validateRequestOptions(options, this.defaultTimeoutMs);
+    const operation = "get-available-devices";
+    if (request.signal?.aborted) {
+      throw new SpotifyAbortError(
+        operation,
+        request.signal.reason === undefined
+          ? undefined
+          : { cause: request.signal.reason },
+      );
+    }
+    const accessToken = await this.accessTokenSource.getAccessToken(request);
+    if (!isNonEmptyString(accessToken)) {
+      throw new SpotifyAuthenticationError(
+        "Spotify access-token source returned an invalid token.",
+      );
+    }
+    const combined = createOperationSignal(
+      operation,
+      request.signal,
+      request.timeoutMs,
+    );
+    const endpointUrl = new URL(
+      DEVICES_ENDPOINT,
+      `${this.apiBaseUrl}/`,
+    ).toString();
+    try {
+      const response = await this.fetchImplementation(endpointUrl, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        signal: combined.signal,
+      });
+      if (request.signal?.aborted) combined.classify(request.signal.reason);
+      if (response.status === 401) {
+        throw new SpotifyAuthenticationError(
+          "Spotify authentication was rejected. Reauthorization may be required.",
+          undefined,
+          401,
+        );
+      }
+      if (response.status === 429) {
+        throw new SpotifyRateLimitError(
+          DEVICES_ENDPOINT,
+          parseRetryAfter(response.headers.get("Retry-After")),
+        );
+      }
+      if (!response.ok)
+        throw new SpotifyHttpError(DEVICES_ENDPOINT, response.status);
+      let body: unknown;
+      try {
+        body = await response.json();
+      } catch (error) {
+        try {
+          combined.classify(error);
+        } catch (classified) {
+          if (classified !== error) throw classified;
+        }
+        throw new SpotifyResponseError(
+          DEVICES_ENDPOINT,
+          ["body: must be valid JSON"],
+          { cause: error },
+        );
+      }
+      if (request.signal?.aborted) combined.classify(request.signal.reason);
+      return parseAvailableDevices(body);
+    } catch (error) {
+      if (
+        error instanceof SpotifyAuthenticationError ||
+        error instanceof SpotifyHttpError ||
+        error instanceof SpotifyResponseError
+      )
+        throw error;
+      try {
+        combined.classify(error);
+      } catch (classified) {
+        if (classified !== error) throw classified;
+      }
+      throw new SpotifyTransportError(operation);
+    } finally {
+      combined.cleanup();
+    }
+  }
+
+  async startPlayback(
+    request: SpotifyStartPlaybackRequest,
+    options: SpotifyRequestOptions = {},
+  ): Promise<SpotifyStartPlaybackResult> {
+    const playback = validateStartPlaybackRequest(request);
+    const requestOptions = validateRequestOptions(
+      options,
+      this.defaultTimeoutMs,
+    );
+    const operation = "start-playback";
+    if (requestOptions.signal?.aborted) {
+      throw new SpotifyAbortError(
+        operation,
+        requestOptions.signal.reason === undefined
+          ? undefined
+          : { cause: requestOptions.signal.reason },
+      );
+    }
+    const accessToken =
+      await this.accessTokenSource.getAccessToken(requestOptions);
+    if (!isNonEmptyString(accessToken)) {
+      throw new SpotifyAuthenticationError(
+        "Spotify access-token source returned an invalid token.",
+      );
+    }
+    const combined = createOperationSignal(
+      operation,
+      requestOptions.signal,
+      requestOptions.timeoutMs,
+    );
+    const endpointUrl = new URL(START_PLAYBACK_ENDPOINT, `${this.apiBaseUrl}/`);
+    if (playback.deviceId !== undefined)
+      endpointUrl.searchParams.set("device_id", playback.deviceId);
+    const body =
+      playback.itemType === "track"
+        ? { uris: [playback.uri] }
+        : { context_uri: playback.uri };
+    try {
+      const response = await this.fetchImplementation(endpointUrl, {
+        method: "PUT",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        signal: combined.signal,
+      });
+      if (requestOptions.signal?.aborted)
+        combined.classify(requestOptions.signal.reason);
+      if (response.status === 401) {
+        throw new SpotifyAuthenticationError(
+          "Spotify authentication was rejected. Reauthorization may be required.",
+          undefined,
+          401,
+        );
+      }
+      if (response.status === 429) {
+        throw new SpotifyRateLimitError(
+          START_PLAYBACK_ENDPOINT,
+          parseRetryAfter(response.headers.get("Retry-After")),
+        );
+      }
+      if (!response.ok)
+        throw new SpotifyHttpError(START_PLAYBACK_ENDPOINT, response.status);
+      if (response.status !== 204) {
+        throw new SpotifyResponseError(START_PLAYBACK_ENDPOINT, [
+          "status: must be 204",
+        ]);
+      }
+      return deepFreeze({
+        status: "accepted" as const,
+        itemType: playback.itemType,
+        uri: playback.uri,
+        ...(playback.deviceId === undefined
+          ? {}
+          : { deviceId: playback.deviceId }),
+      });
+    } catch (error) {
+      if (
+        error instanceof SpotifyAuthenticationError ||
+        error instanceof SpotifyHttpError ||
+        error instanceof SpotifyResponseError
+      )
+        throw error;
+      try {
+        combined.classify(error);
+      } catch (classified) {
+        if (classified !== error) throw classified;
+      }
+      throw new SpotifyTransportError(operation);
+    } finally {
+      combined.cleanup();
+    }
+  }
+
   private async search(
     type: "track" | "playlist",
     operation: string,
@@ -281,6 +475,74 @@ interface ValidatedSearchRequest {
   readonly limit: number;
   readonly signal?: AbortSignal;
   readonly timeoutMs: number;
+}
+
+interface ValidatedStartPlaybackRequest {
+  readonly uri: string;
+  readonly itemType: "track" | "playlist";
+  readonly deviceId?: string;
+}
+
+function validateStartPlaybackRequest(
+  value: unknown,
+): Readonly<ValidatedStartPlaybackRequest> {
+  const details: string[] = [];
+  if (!isPlainObject(value))
+    throw new SpotifyRequestError(["request: must be a plain object"]);
+  rejectUnknown(value, START_PLAYBACK_PROPERTIES, "request", details);
+  let itemType: "track" | "playlist" | undefined;
+  if (typeof value.uri !== "string") {
+    details.push("request.uri: must be a string");
+  } else if (
+    value.uri.length === 0 ||
+    value.uri !== value.uri.trim() ||
+    value.uri.length > MAXIMUM_SPOTIFY_URI_LENGTH
+  ) {
+    details.push(
+      `request.uri: must be a trimmed string between 1 and ${MAXIMUM_SPOTIFY_URI_LENGTH} characters`,
+    );
+  } else {
+    const match = /^spotify:(track|playlist):([A-Za-z0-9]+)$/u.exec(value.uri);
+    if (match === null)
+      details.push(
+        "request.uri: must be a Spotify track or playlist URI with a conservative alphanumeric ID",
+      );
+    else itemType = match[1] as "track" | "playlist";
+  }
+  let deviceId: string | undefined;
+  if (value.deviceId !== undefined) {
+    if (
+      typeof value.deviceId !== "string" ||
+      value.deviceId.length === 0 ||
+      value.deviceId !== value.deviceId.trim() ||
+      value.deviceId.length > MAXIMUM_DEVICE_ID_LENGTH ||
+      hasControlCharacter(value.deviceId)
+    ) {
+      details.push(
+        `request.deviceId: must be a trimmed, control-free string between 1 and ${MAXIMUM_DEVICE_ID_LENGTH} characters`,
+      );
+    } else deviceId = value.deviceId;
+  }
+  if (details.length > 0 || itemType === undefined)
+    throw new SpotifyRequestError(details);
+  return Object.freeze({
+    uri: value.uri as string,
+    itemType,
+    ...(deviceId === undefined ? {} : { deviceId }),
+  });
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function hasControlCharacter(value: string): boolean {
+  return [...value].some((character) => {
+    const code = character.codePointAt(0) ?? 0;
+    return code <= 31 || code === 127;
+  });
 }
 
 function validateSearchRequest(
@@ -486,6 +748,73 @@ function parsePlaylistSearch(
   if (details.length > 0)
     throw new SpotifyResponseError(SEARCH_ENDPOINT, details);
   return deepFreeze({ query, results });
+}
+
+function parseAvailableDevices(value: unknown): SpotifyAvailableDevices {
+  const details: string[] = [];
+  if (!isRecord(value))
+    throw new SpotifyResponseError(DEVICES_ENDPOINT, [
+      "body: must be an object",
+    ]);
+  if (!Array.isArray(value.devices))
+    throw new SpotifyResponseError(DEVICES_ENDPOINT, [
+      "body.devices: must be an array",
+    ]);
+  const devices: Readonly<SpotifyAvailableDevice>[] = [];
+  value.devices.forEach((device, index) => {
+    const path = `body.devices[${index}]`;
+    if (!isRecord(device)) {
+      details.push(`${path}: must be an object`);
+      return;
+    }
+    const name = readNonEmpty(device.name, `${path}.name`, details);
+    const type = readNonEmpty(device.type, `${path}.type`, details);
+    const isActive = readBoolean(
+      device.is_active,
+      `${path}.is_active`,
+      details,
+    );
+    const isRestricted = readBoolean(
+      device.is_restricted,
+      `${path}.is_restricted`,
+      details,
+    );
+    const supportsVolume = readBoolean(
+      device.supports_volume,
+      `${path}.supports_volume`,
+      details,
+    );
+    const id = readNullableString(device.id, `${path}.id`, details);
+    const volumePercent = readNullableInteger(
+      device.volume_percent,
+      `${path}.volume_percent`,
+      details,
+      0,
+      100,
+    );
+    if (
+      name === undefined ||
+      type === undefined ||
+      isActive === undefined ||
+      isRestricted === undefined ||
+      supportsVolume === undefined
+    )
+      return;
+    devices.push(
+      Object.freeze({
+        name,
+        type,
+        isActive,
+        isRestricted,
+        supportsVolume,
+        ...(id === undefined ? {} : { id }),
+        ...(volumePercent === undefined ? {} : { volumePercent }),
+      }),
+    );
+  });
+  if (details.length > 0)
+    throw new SpotifyResponseError(DEVICES_ENDPOINT, details);
+  return deepFreeze({ devices });
 }
 
 function readSearchItems(

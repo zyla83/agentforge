@@ -30,6 +30,32 @@ export interface SpotifyPlaylistSearchResult {
   readonly results: readonly Readonly<SpotifyPlaylistSearchItem>[];
 }
 
+export interface SpotifyAvailableDevice {
+  readonly id?: string;
+  readonly name: string;
+  readonly type: string;
+  readonly isActive: boolean;
+  readonly isRestricted: boolean;
+  readonly supportsVolume: boolean;
+  readonly volumePercent?: number;
+}
+
+export interface SpotifyAvailableDevices {
+  readonly devices: readonly Readonly<SpotifyAvailableDevice>[];
+}
+
+export interface SpotifyStartPlaybackRequest {
+  readonly uri: string;
+  readonly deviceId?: string;
+}
+
+export interface SpotifyStartPlaybackResult {
+  readonly status: "accepted";
+  readonly itemType: "track" | "playlist";
+  readonly uri: string;
+  readonly deviceId?: string;
+}
+
 export interface SpotifyPlaybackDevice {
   readonly id?: string;
   readonly name: string;

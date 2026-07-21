@@ -101,7 +101,7 @@ The terminal status lines consume `streamTurn()` lifecycle events. They do not
 enable the separate programmatic tool execution observer API, so tool status is
 not duplicated.
 
-## Spotify read-only tools
+## Spotify tools
 
 Spotify mode is an online, opt-in integration. It requires Spotify Premium, a
 Spotify Developer application, and an internet connection. Register this exact
@@ -131,16 +131,21 @@ pnpm example:chat
 ```
 
 On first use, the CLI prints an authorization URL. Open it manually and approve
-only `user-read-playback-state`. The temporary callback listens on IPv4
-loopback only and closes after authorization, failure, timeout, or cancellation.
-The CLI does not open a browser itself.
+exactly `user-read-playback-state` and `user-modify-playback-state`. Upgrading a
+credential created by the earlier read-only integration requires one new PKCE
+authorization; the old credential is retained if migration fails. Subsequent
+starts refresh silently. The temporary callback listens on IPv4 loopback only
+and closes after authorization, failure, timeout, or cancellation. The CLI does
+not open a browser itself.
 
-Spotify mode registers exactly these read-only tools in this order:
+Spotify mode registers exactly these tools in this order:
 
 ```text
 spotify_get_current_playback
 spotify_search_tracks
 spotify_search_playlists
+spotify_get_available_devices
+spotify_start_playback
 ```
 
 The playback tool reports an idle, playing, or paused snapshot. The search tools
@@ -151,10 +156,25 @@ names, owners, and Spotify playlist URIs. Results preserve Spotify's response
 order, but AgentForge does not guarantee or control Spotify ranking.
 
 Search performs one request with no automatic pagination, caching, follow-up
-detail fetches, or retries. None of the three tools modifies playback, the
-queue, devices, playlists, the library, or account state. The existing
-`user-read-playback-state` OAuth scope is unchanged; search adds no scope.
-Spotify account, API availability, policy, and rate limits still apply.
+detail fetches, or retries. Device inspection returns concise Spotify Connect
+metadata: optional ID, name, type, active and restricted state, volume support,
+and optional volume. Device IDs can become stale and are not persisted.
+
+`spotify_start_playback` is an external side effect. It accepts exactly one
+Spotify track or playlist URI and an optional exact device ID. Without a device
+ID Spotify targets the active device. An `accepted` result means only that
+Spotify returned HTTP 204; it does not independently prove audible playback.
+The tool does not search, list devices, verify playback, retry, or roll back the
+change. Timeouts and connection failures are ambiguous and are never retried.
+Restricted or unavailable devices may reject commands.
+
+Spotify mode is explicit and opt-in, but AgentForge has no general permission
+or confirmation engine. A model can invoke the registered playback tool during
+a tool-enabled turn. This integration does not pause, transfer, seek, skip,
+change volume, change repeat or shuffle, queue items, or resume unspecified
+content. It does not modify playlists, the library, or account data. Spotify
+account rules, Premium requirements, API availability, policy, and rate limits
+still apply.
 
 The refresh credential defaults to
 `<home>/.agentforge/spotify/spotify-refresh-credential.json`. Override its
@@ -164,11 +184,11 @@ The credential is sensitive local plaintext with best-effort file permissions,
 not encryption or an OS credential vault. Never commit or share it. Deleting
 the file forces reauthorization but does not revoke Spotify access.
 
-Playback results can expose listening activity and device metadata. Search
-terms and normalized results are also model-visible and may be stored in V2
+Playback results, device metadata, search terms, normalized results, playback
+commands, and acknowledgements are model-visible and may be stored in V2
 conversation history. Observer redaction does not remove these values from
-model-visible results or persisted history. AgentForge does not download or
-handle Spotify audio.
+model-visible results or persisted history. AgentForge does not download,
+proxy, alter, synchronize, broadcast, or otherwise handle Spotify audio.
 
 ## Commands
 
