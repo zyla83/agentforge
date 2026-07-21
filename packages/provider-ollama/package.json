@@ -1,6 +1,7 @@
 {
   "name": "@agentforge/provider-ollama",
   "version": "0.1.0",
+  "description": "Ollama LLM provider adapter for AgentForge.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

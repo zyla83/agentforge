@@ -1,6 +1,7 @@
 {
   "name": "@agentforge/example-tool-execution",
   "version": "0.1.0",
+  "description": "Deterministic multi-round tool execution and observability example for AgentForge.",
   "private": true,
   "type": "module",
   "scripts": {

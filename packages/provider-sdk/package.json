@@ -1,6 +1,7 @@
 {
   "name": "@agentforge/provider-sdk",
   "version": "0.1.0",
+  "description": "Provider-neutral LLM, streaming, registry, health, and tool contracts for AgentForge.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

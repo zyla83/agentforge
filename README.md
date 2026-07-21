@@ -1,3 +1,15 @@
+<p align="center">
+  <img src="./asstets/brand/readme-banner.svg" alt="AgentForge modular forge environment" width="100%">
+</p>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./asstets/brand/agentforge-logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="./asstets/brand/agentforge-logo-light.svg">
+    <img src="./asstets/brand/agentforge-logo-light.svg" alt="AgentForge" width="520">
+  </picture>
+</p>
+
 # AgentForge
 
 AgentForge is a TypeScript framework for composing offline-first, local AI
@@ -370,6 +382,13 @@ Future capability tracks include desktop tools, voice I/O, permission and
 confirmation policy, additional providers, structured logging exporters,
 package publication, graphical interfaces, and remote/distributed execution.
 These are outside the 0.1.0 MVP baseline.
+
+## Brand assets
+
+Logos, marks, documentation banners, package icons, social artwork, and favicon
+variants are maintained in [`asstets/brand`](./asstets/brand/README.md). The
+asset guide documents the intended use of each variant. Repository documentation
+uses relative asset paths and does not depend on an external image host.
 
 ## License
 

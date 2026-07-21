@@ -1,6 +1,7 @@
 {
   "name": "@agentforge/spotify-client",
   "version": "0.1.0",
+  "description": "Spotify PKCE authentication, playback inspection, search, devices, and constrained playback control.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

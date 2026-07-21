@@ -1,6 +1,7 @@
 {
   "name": "@agentforge/ollama-client",
   "version": "0.1.0",
+  "description": "Typed HTTP client for local Ollama APIs.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

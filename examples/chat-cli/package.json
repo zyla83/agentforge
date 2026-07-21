@@ -1,6 +1,7 @@
 {
   "name": "@agentforge/example-chat-cli",
   "version": "0.1.0",
+  "description": "Interactive local chat CLI with Ollama, persistence, tools, and opt-in Spotify integration.",
   "private": true,
   "type": "module",
   "scripts": {

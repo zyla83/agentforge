@@ -1,6 +1,7 @@
 {
   "name": "@agentforge/example-tools",
   "version": "0.1.0",
+  "description": "Deterministic example tool definitions and handlers for AgentForge.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

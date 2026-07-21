@@ -1,9 +1,16 @@
+<p align="center">
+  <img src="./asstets/brand/agentforge-mark.svg" alt="AgentForge" width="88" height="88">
+</p>
+
 # Changelog
 
 ## Unreleased
 
 ### Added
 
+- A reusable visual identity asset set with documentation banners, light and
+  dark logos, package icons, social artwork, and favicon variants
+- Package-level README coverage and manifest descriptions across the workspace
 - Spotify Authorization Code with PKCE, refresh-token rotation, and immutable
   current-playback inspection through `@agentforge/spotify-client`
 - Opt-in `AGENTFORGE_CHAT_TOOLS=spotify` mode with the read-only

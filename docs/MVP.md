@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../asstets/brand/agentforge-mark.svg" alt="AgentForge" width="96" height="96">
+</p>
+
 # AgentForge 0.1.0 MVP Release
 
 AgentForge 0.1.0 is the first MVP baseline for building offline-first local AI

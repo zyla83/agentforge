@@ -1,6 +1,7 @@
 {
   "name": "@agentforge/provider-mock",
   "version": "0.1.0",
+  "description": "Deterministic mock LLM provider for AgentForge tests and examples.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

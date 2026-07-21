@@ -1,6 +1,7 @@
 {
   "name": "@agentforge/storage-filesystem",
   "version": "0.1.0",
+  "description": "Durable filesystem conversation storage adapter for AgentForge.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

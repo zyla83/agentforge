@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../../asstets/brand/package-icons/example-tools.svg" alt="AgentForge example tools package icon" width="96" height="96">
+</p>
+
 # AgentForge example tools
 
 `@agentforge/example-tools` contains three deterministic, side-effect-free

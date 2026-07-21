@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../../asstets/brand/package-icons/storage-filesystem.svg" alt="AgentForge filesystem storage package icon" width="96" height="96">
+</p>
+
 # @agentforge/storage-filesystem
 
 Durable Node.js 22+ implementation of the AgentForge `ConversationStore`

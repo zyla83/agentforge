@@ -1,6 +1,7 @@
 {
   "name": "@agentforge/shared",
   "version": "0.1.0",
+  "description": "Shared result and error primitives for AgentForge packages.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

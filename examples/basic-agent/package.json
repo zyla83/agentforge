@@ -1,6 +1,7 @@
 {
   "name": "@agentforge/example-basic",
   "version": "0.1.0",
+  "description": "Deterministic example of AgentForge lifecycle, profiles, and mock generation.",
   "private": true,
   "type": "module",
   "scripts": {

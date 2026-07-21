@@ -1,6 +1,7 @@
 {
   "name": "@agentforge/example-ollama",
   "version": "0.1.0",
+  "description": "Live Ollama health-check and generation example for AgentForge.",
   "private": true,
   "type": "module",
   "scripts": {

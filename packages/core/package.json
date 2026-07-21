@@ -1,6 +1,7 @@
 {
   "name": "@agentforge/core",
   "version": "0.1.0",
+  "description": "Core runtime, conversation orchestration, tools, and persistence contracts for AgentForge.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

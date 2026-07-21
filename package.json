@@ -1,6 +1,7 @@
 {
   "name": "agentforge",
   "version": "0.1.0",
+  "description": "Offline-first TypeScript framework for building local AI agents.",
   "private": true,
   "packageManager": "pnpm@11.12.0",
   "engines": {

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../../asstets/brand/package-icons/spotify-client.svg" alt="AgentForge Spotify client package icon" width="96" height="96">
+</p>
+
 # @agentforge/spotify-client
 
 Focused Spotify integration for AgentForge applications. The package implements

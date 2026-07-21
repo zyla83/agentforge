@@ -1,6 +1,7 @@
 {
   "name": "@agentforge/logger",
   "version": "0.1.0",
+  "description": "Structured logging abstraction for AgentForge applications and plugins.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

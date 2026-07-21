@@ -1,3 +1,11 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../../asstets/brand/agentforge-logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="../../asstets/brand/agentforge-logo-light.svg">
+    <img src="../../asstets/brand/agentforge-logo-light.svg" alt="AgentForge" width="420">
+  </picture>
+</p>
+
 # Ollama agent example
 
 This optional live example verifies an installed Ollama server through

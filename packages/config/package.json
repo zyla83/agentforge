@@ -1,6 +1,7 @@
 {
   "name": "@agentforge/config",
   "version": "0.1.0",
+  "description": "Validated configuration loading for AgentForge applications.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

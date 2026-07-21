@@ -1,6 +1,7 @@
 {
   "name": "@agentforge/test-package-consumer",
   "version": "0.1.0",
+  "description": "Private package-root resolution fixture for AgentForge workspace packages.",
   "private": true,
   "type": "module",
   "scripts": {
