@@ -8,6 +8,10 @@
   current-playback inspection through `@agentforge/spotify-client`
 - Opt-in `AGENTFORGE_CHAT_TOOLS=spotify` mode with the read-only
   `spotify_get_current_playback` tool
+- Immutable Spotify track and playlist catalog search with a default limit of 5,
+  a maximum limit of 10, and no automatic pagination
+- Read-only `spotify_search_tracks` and `spotify_search_playlists` tools in
+  Spotify chat mode without additional OAuth scopes
 
 ### Security
 
@@ -16,6 +20,9 @@
   is not protected by an AgentForge credential vault
 - Normalized playback data may reveal listening activity and device metadata and
   may be visible to the model or persisted in conversation history
+- Spotify search terms and normalized catalog results may be visible to the
+  model or persisted in conversation history; observer redaction does not alter
+  model-visible or persisted values
 
 ## v0.1.0 (2026-07-20)
 

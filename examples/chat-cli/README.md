@@ -101,7 +101,7 @@ The terminal status lines consume `streamTurn()` lifecycle events. They do not
 enable the separate programmatic tool execution observer API, so tool status is
 not duplicated.
 
-## Spotify current playback
+## Spotify read-only tools
 
 Spotify mode is an online, opt-in integration. It requires Spotify Premium, a
 Spotify Developer application, and an internet connection. Register this exact
@@ -135,11 +135,26 @@ only `user-read-playback-state`. The temporary callback listens on IPv4
 loopback only and closes after authorization, failure, timeout, or cancellation.
 The CLI does not open a browser itself.
 
-Spotify mode registers only `spotify_get_current_playback`. The tool reports an
-idle, playing, or paused snapshot and does not modify playback, the queue,
-devices, playlists, the library, or account state. Search and playback control
-are not implemented. Spotify account, scope, API availability, policy, and rate
-limits still apply, and requests are never retried automatically.
+Spotify mode registers exactly these read-only tools in this order:
+
+```text
+spotify_get_current_playback
+spotify_search_tracks
+spotify_search_playlists
+```
+
+The playback tool reports an idle, playing, or paused snapshot. The search tools
+accept a required `query` of at most 200 characters and an optional `limit` from
+1 through 10. The default limit is 5. Track results contain concise names,
+artists, Spotify track URIs, and optional durations. Playlist results contain
+names, owners, and Spotify playlist URIs. Results preserve Spotify's response
+order, but AgentForge does not guarantee or control Spotify ranking.
+
+Search performs one request with no automatic pagination, caching, follow-up
+detail fetches, or retries. None of the three tools modifies playback, the
+queue, devices, playlists, the library, or account state. The existing
+`user-read-playback-state` OAuth scope is unchanged; search adds no scope.
+Spotify account, API availability, policy, and rate limits still apply.
 
 The refresh credential defaults to
 `<home>/.agentforge/spotify/spotify-refresh-credential.json`. Override its
@@ -149,10 +164,11 @@ The credential is sensitive local plaintext with best-effort file permissions,
 not encryption or an OS credential vault. Never commit or share it. Deleting
 the file forces reauthorization but does not revoke Spotify access.
 
-Playback results can expose listening activity and device metadata. They are
-model-visible and may be stored in V2 conversation history. Observer redaction
-does not remove those values from model-visible results or persisted history.
-AgentForge does not download or handle Spotify audio.
+Playback results can expose listening activity and device metadata. Search
+terms and normalized results are also model-visible and may be stored in V2
+conversation history. Observer redaction does not remove these values from
+model-visible results or persisted history. AgentForge does not download or
+handle Spotify audio.
 
 ## Commands
 
@@ -224,7 +240,7 @@ does not save automatically.
 ## Known limitations
 
 - Ollama only
-- Spotify current-playback inspection requires network access and external setup
+- Spotify playback inspection and catalog search require network access and external setup
 - Tool calling requires explicit startup configuration and a compatible model
 - No automatic resume
 - No cross-process write coordination

@@ -13,7 +13,11 @@ import type { ChatApplicationToolOptions } from "./ChatApplicationOptions.js";
 import type { ChatToolMode } from "./environment.js";
 import {
   createSpotifyCurrentPlaybackToolHandler,
+  createSpotifyPlaylistSearchToolHandler,
+  createSpotifyTrackSearchToolHandler,
   spotifyCurrentPlaybackToolDefinition,
+  spotifyPlaylistSearchToolDefinition,
+  spotifyTrackSearchToolDefinition,
 } from "./spotifyTools.js";
 
 export interface ChatSpotifyToolDependencies {
@@ -33,7 +37,11 @@ export function createChatToolOptions(
       mode === "example"
         ? exampleToolDefinitions
         : mode === "spotify"
-          ? Object.freeze([spotifyCurrentPlaybackToolDefinition])
+          ? Object.freeze([
+              spotifyCurrentPlaybackToolDefinition,
+              spotifyTrackSearchToolDefinition,
+              spotifyPlaylistSearchToolDefinition,
+            ])
           : Object.freeze([] as Readonly<ToolDefinition>[]),
   });
 }
@@ -51,6 +59,14 @@ export function registerConfiguredChatTools(
     agent.registerTool(
       spotifyCurrentPlaybackToolDefinition,
       createSpotifyCurrentPlaybackToolHandler(spotify.client),
+    );
+    agent.registerTool(
+      spotifyTrackSearchToolDefinition,
+      createSpotifyTrackSearchToolHandler(spotify.client),
+    );
+    agent.registerTool(
+      spotifyPlaylistSearchToolDefinition,
+      createSpotifyPlaylistSearchToolHandler(spotify.client),
     );
   }
 }

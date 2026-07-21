@@ -3,6 +3,33 @@ export interface SpotifyRequestOptions {
   readonly timeoutMs?: number;
 }
 
+export interface SpotifySearchRequestOptions extends SpotifyRequestOptions {
+  readonly limit?: number;
+}
+
+export interface SpotifyTrackSearchItem {
+  readonly name: string;
+  readonly artists: readonly string[];
+  readonly uri: string;
+  readonly durationMs?: number;
+}
+
+export interface SpotifyPlaylistSearchItem {
+  readonly name: string;
+  readonly owner: string;
+  readonly uri: string;
+}
+
+export interface SpotifyTrackSearchResult {
+  readonly query: string;
+  readonly results: readonly Readonly<SpotifyTrackSearchItem>[];
+}
+
+export interface SpotifyPlaylistSearchResult {
+  readonly query: string;
+  readonly results: readonly Readonly<SpotifyPlaylistSearchItem>[];
+}
+
 export interface SpotifyPlaybackDevice {
   readonly id?: string;
   readonly name: string;

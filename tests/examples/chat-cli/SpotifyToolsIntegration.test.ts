@@ -46,7 +46,13 @@ describe("chat CLI Spotify tool integration", () => {
       }),
     );
     const spotify = {
-      client: { getCurrentPlayback } as SpotifyClient,
+      client: {
+        getCurrentPlayback,
+        searchTracks: async (query: string) =>
+          deepFreeze({ query, results: [] }),
+        searchPlaylists: async (query: string) =>
+          deepFreeze({ query, results: [] }),
+      } as SpotifyClient,
     };
     const agent = new AgentForge();
     agent.registerLLMProvider(provider, { default: true });
@@ -107,10 +113,134 @@ describe("chat CLI Spotify tool integration", () => {
       expect(provider.requests).toHaveLength(2);
       expect(provider.requests[0]?.tools?.map(({ name }) => name)).toEqual([
         "spotify_get_current_playback",
+        "spotify_search_tracks",
+        "spotify_search_playlists",
       ]);
       expect(output.read()).toContain(
-        "Tools: spotify (spotify_get_current_playback)",
+        "Tools: spotify (spotify_get_current_playback, spotify_search_tracks, spotify_search_playlists)",
       );
+      expect(errors.read()).toBe("");
+    } finally {
+      if (agent.getState() === AgentForgeState.Running) await agent.stop();
+    }
+  });
+
+  it("executes both search tools and returns normalized results to the model", async () => {
+    const provider = new SpotifySearchScriptedProvider();
+    const searchTracks = vi.fn(async (query: string) =>
+      deepFreeze({
+        query,
+        results: [
+          {
+            name: "Test Track",
+            artists: ["Test Artist"],
+            uri: "spotify:track:test",
+          },
+        ],
+      }),
+    );
+    const searchPlaylists = vi.fn(async (query: string) =>
+      deepFreeze({
+        query,
+        results: [
+          {
+            name: "Test Playlist",
+            owner: "Test Owner",
+            uri: "spotify:playlist:test",
+          },
+        ],
+      }),
+    );
+    const spotify = {
+      client: {
+        getCurrentPlayback: async () =>
+          Object.freeze({ status: "idle" as const }),
+        searchTracks,
+        searchPlaylists,
+      } as SpotifyClient,
+    };
+    const agent = new AgentForge();
+    agent.registerLLMProvider(provider, { default: true });
+    const tools = createChatToolOptions("spotify", spotify);
+    registerConfiguredChatTools(agent, tools, spotify);
+    await agent.start();
+    try {
+      const profile = createAgentProfile({
+        id: "spotify-search-chat",
+        systemPrompt: "Use Spotify catalog search when requested.",
+        provider: provider.metadata.name,
+        model: "scripted-model",
+      });
+      const store = createInMemoryConversationStore();
+      const initialEntry = await store.save(
+        createConversation({ id: "spotify-search-active" }),
+      );
+      const input = new PassThrough();
+      const output = captureStream();
+      const errors = captureStream();
+      const application = new ChatApplication({
+        agent,
+        engine: createChatConversationEngine(agent, profile, tools),
+        profile,
+        store,
+        initialEntry,
+        dataDirectory: "C:\\chat-data",
+        timeoutMs: 1_000,
+        input,
+        output: output.stream,
+        errorOutput: errors.stream,
+        tools,
+      });
+      const running = application.run();
+      await output.waitFor("You: ");
+      input.write("Find a track.\n");
+      await output.waitFor("Assistant: Track found.\nYou: ");
+      input.write("Find a playlist.\n");
+      await output.waitFor("Assistant: Playlist found.\nYou: ");
+      input.write("/exit\n");
+      await running;
+
+      expect(searchTracks).toHaveBeenCalledTimes(1);
+      expect(searchTracks).toHaveBeenCalledWith("Test Track", {
+        limit: 1,
+        signal: expect.any(AbortSignal),
+      });
+      expect(searchPlaylists).toHaveBeenCalledTimes(1);
+      expect(searchPlaylists).toHaveBeenCalledWith("Test Playlist", {
+        signal: expect.any(AbortSignal),
+      });
+      expect(provider.requests).toHaveLength(4);
+      expect(provider.requests[0]?.tools?.map(({ name }) => name)).toEqual([
+        "spotify_get_current_playback",
+        "spotify_search_tracks",
+        "spotify_search_playlists",
+      ]);
+      const trackResult = provider.requests[1]?.messages.find(
+        (message) => message.role === LLMMessageRole.Tool,
+      );
+      expect(trackResult).toMatchObject({
+        toolName: "spotify_search_tracks",
+        result: {
+          status: "success",
+          output: {
+            query: "Test Track",
+            results: [{ uri: "spotify:track:test" }],
+          },
+        },
+      });
+      const playlistResult = provider.requests[3]?.messages
+        .filter((message) => message.role === LLMMessageRole.Tool)
+        .at(-1);
+      expect(playlistResult).toMatchObject({
+        toolName: "spotify_search_playlists",
+        result: {
+          status: "success",
+          output: {
+            query: "Test Playlist",
+            results: [{ uri: "spotify:playlist:test" }],
+          },
+        },
+      });
       expect(errors.read()).toBe("");
     } finally {
       if (agent.getState() === AgentForgeState.Running) await agent.stop();
@@ -160,6 +290,66 @@ class SpotifyScriptedProvider implements LLMStreamingProvider {
       return;
     }
     const content = "Test Track is playing.";
+    yield { type: "delta", model: request.model, delta: content } as const;
+    yield {
+      type: "completed",
+      response: createLLMGenerationResponse({
+        model: request.model,
+        message: { role: LLMMessageRole.Assistant, content },
+        finishReason: LLMFinishReason.Stop,
+      }),
+    } as const;
+  }
+}
+
+class SpotifySearchScriptedProvider implements LLMStreamingProvider {
+  readonly metadata = Object.freeze({
+    name: "spotify-search-scripted",
+    version: "1.0.0",
+  });
+  readonly capabilities: Readonly<LLMProviderCapabilities> = Object.freeze({
+    streaming: true,
+    tools: true,
+  });
+  readonly requests: LLMGenerationRequest[] = [];
+
+  async checkHealth() {
+    return healthyProvider();
+  }
+  async generate(): Promise<LLMGenerationResponse> {
+    throw new Error("Streaming is required.");
+  }
+
+  async *stream(request: LLMGenerationRequest) {
+    this.requests.push(request);
+    if (this.requests.length === 1 || this.requests.length === 3) {
+      const track = this.requests.length === 1;
+      yield {
+        type: "completed",
+        response: createLLMGenerationResponse({
+          model: request.model,
+          message: {
+            role: LLMMessageRole.Assistant,
+            content: "",
+            toolCalls: [
+              createToolCall({
+                id: track ? "track-call" : "playlist-call",
+                name: track
+                  ? "spotify_search_tracks"
+                  : "spotify_search_playlists",
+                arguments: track
+                  ? { query: "Test Track", limit: 1 }
+                  : { query: "Test Playlist" },
+              }),
+            ],
+          },
+          finishReason: LLMFinishReason.ToolCalls,
+        }),
+      } as const;
+      return;
+    }
+    const content =
+      this.requests.length === 2 ? "Track found." : "Playlist found.";
     yield { type: "delta", model: request.model, delta: content } as const;
     yield {
       type: "completed",

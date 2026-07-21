@@ -27,6 +27,13 @@ import {
   SpotifyAuthorizationSession,
   SpotifyClient,
 } from "@agentforge/spotify-client";
+import type {
+  SpotifyPlaylistSearchItem,
+  SpotifyPlaylistSearchResult,
+  SpotifySearchRequestOptions,
+  SpotifyTrackSearchItem,
+  SpotifyTrackSearchResult,
+} from "@agentforge/spotify-client";
 import {
   FilesystemConversationStore,
   createFilesystemConversationStore,
@@ -39,6 +46,11 @@ interface PublicTypeImports {
   readonly observability: ConversationEngineObservabilityOptions;
   readonly plugin: Plugin;
   readonly provider: LLMProvider;
+  readonly spotifyPlaylistSearchItem: SpotifyPlaylistSearchItem;
+  readonly spotifyPlaylistSearchResult: SpotifyPlaylistSearchResult;
+  readonly spotifySearchOptions: SpotifySearchRequestOptions;
+  readonly spotifyTrackSearchItem: SpotifyTrackSearchItem;
+  readonly spotifyTrackSearchResult: SpotifyTrackSearchResult;
   readonly toolEvent: ToolExecutionObserverEvent;
   readonly toolRedactor: ToolExecutionRedactor;
   readonly tool: ToolDefinition;

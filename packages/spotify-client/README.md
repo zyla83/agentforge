@@ -2,11 +2,12 @@
 
 Focused Spotify integration for AgentForge applications. The package implements
 Authorization Code with PKCE, refresh-token lifecycle, and read-only inspection
-of the current Spotify playback state.
+of the current Spotify playback state plus track and playlist catalog search.
 
-The current scope is intentionally narrow. It does not search Spotify, modify
-playback, manage playlists or library content, download audio, or use the Web
-Playback SDK. Requests are not retried automatically.
+The current scope is intentionally narrow. It does not modify playback, inspect
+playlist contents, manage playlists or library content, download audio, or use
+the Web Playback SDK. Search is limited to tracks and playlists, has no automatic
+pagination, and does not cache results. Requests are not retried automatically.
 
 ## Prerequisites
 
@@ -43,9 +44,18 @@ const session = new SpotifyAuthorizationSession({
 });
 const client = new SpotifyClient({ accessTokenSource: session });
 const playback = await client.getCurrentPlayback({ timeoutMs: 30_000 });
+const tracks = await client.searchTracks("track and artist");
+const playlists = await client.searchPlaylists("focus", { limit: 10 });
 ```
 
-Pass an `AbortSignal` to token acquisition or playback requests to cancel work.
+Search queries are trimmed, must contain 1 through 200 characters, and return
+concise immutable items in Spotify response order. The default result limit is
+5 and the accepted range is 1 through 10. No offsets, next-page URLs, or
+follow-up detail requests are exposed. Track results contain name, artists, URI,
+and optional duration. Playlist results contain name, owner, and URI.
+
+Pass an `AbortSignal` to token acquisition, playback, or search requests to
+cancel work.
 Caller cancellation, timeout, transport, authentication, HTTP, rate-limit,
 malformed-response, and credential-store failures use distinct typed errors.
 No request is retried and an API `401` is not replayed automatically.
@@ -64,6 +74,9 @@ Deleting it forces authorization on the next run but does not revoke Spotify
 access; revoke access through Spotify account settings when required.
 
 Current-playback results may reveal listening activity and device metadata.
-Applications may pass those normalized values to a model or persist them in a
-conversation. No Spotify audio is downloaded, proxied, transformed, or streamed
-by this package.
+Search terms and normalized catalog results may also be passed to a model or
+persisted in a conversation. Observer redaction does not protect model-visible
+or persisted values. Spotify availability, policy, and rate limits still apply.
+The existing `user-read-playback-state` scope is unchanged; catalog search adds
+no OAuth scope. No Spotify audio is downloaded, proxied, transformed, or
+streamed by this package.

@@ -38,7 +38,12 @@ export type {
   SpotifyPlaybackDevice,
   SpotifyPlaybackItem,
   SpotifyPlaybackSnapshot,
+  SpotifyPlaylistSearchItem,
+  SpotifyPlaylistSearchResult,
   SpotifyRefreshCredential,
   SpotifyRefreshCredentialStore,
   SpotifyRequestOptions,
+  SpotifySearchRequestOptions,
+  SpotifyTrackSearchItem,
+  SpotifyTrackSearchResult,
 } from "./types.js";

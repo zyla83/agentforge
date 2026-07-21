@@ -12,6 +12,10 @@ describe("chat tool startup configuration", () => {
     client: {
       getCurrentPlayback: async () =>
         Object.freeze({ status: "idle" as const }),
+      searchTracks: async (query: string) =>
+        Object.freeze({ query, results: Object.freeze([]) }),
+      searchPlaylists: async (query: string) =>
+        Object.freeze({ query, results: Object.freeze([]) }),
     } as SpotifyClient,
   };
   it("keeps tools absent and disabled in off mode", () => {
@@ -41,16 +45,22 @@ describe("chat tool startup configuration", () => {
     expect(() => registerConfiguredChatTools(agent, tools)).toThrow();
   });
 
-  it("registers only the Spotify current playback tool in Spotify mode", () => {
+  it("registers exactly the three Spotify tools in canonical order", () => {
     const agent = new AgentForge();
     const tools = createChatToolOptions("spotify", spotify);
     registerConfiguredChatTools(agent, tools, spotify);
     expect(tools.definitions.map(({ name }) => name)).toEqual([
       "spotify_get_current_playback",
+      "spotify_search_tracks",
+      "spotify_search_playlists",
     ]);
     expect(
       agent.getRegisteredToolDefinitions().map(({ name }) => name),
-    ).toEqual(["spotify_get_current_playback"]);
+    ).toEqual([
+      "spotify_get_current_playback",
+      "spotify_search_tracks",
+      "spotify_search_playlists",
+    ]);
   });
 
   it("requires injected Spotify dependencies", () => {

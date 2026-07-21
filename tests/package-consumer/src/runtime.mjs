@@ -57,6 +57,14 @@ for (const [packageName, packageModule, expectedExports] of packageChecks) {
   }
 }
 
+for (const methodName of ["searchTracks", "searchPlaylists"]) {
+  if (typeof spotifyClient.SpotifyClient.prototype[methodName] !== "function") {
+    throw new Error(
+      `Package "@agentforge/spotify-client" does not expose SpotifyClient.${methodName}().`,
+    );
+  }
+}
+
 console.log(
   `Public package consumer smoke check passed for ${packageChecks.length} packages.`,
 );

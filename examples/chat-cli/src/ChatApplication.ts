@@ -44,7 +44,7 @@ const HELP_TEXT = `Commands:
 
 Tool configuration:
   Set AGENTFORGE_CHAT_TOOLS=example to enable the bundled example tools.
-  Set AGENTFORGE_CHAT_TOOLS=spotify for read-only current playback inspection.
+  Set AGENTFORGE_CHAT_TOOLS=spotify for read-only playback and catalog inspection.
   Available: calculator, format_text, lookup_inventory
 `;
 
