@@ -7,10 +7,17 @@ import type {
 } from "@agentforge/core";
 import type { ToolDefinition } from "@agentforge/provider-sdk";
 import type { ChatToolMode } from "./environment.js";
+import type { ChatTtsMode } from "./environment.js";
+import type { ChatSpeechOutput } from "./tts/ChatSpeechOutput.js";
 
 export interface ChatApplicationToolOptions {
   readonly mode: ChatToolMode;
   readonly definitions: readonly Readonly<ToolDefinition>[];
+}
+
+export interface ChatApplicationTtsOptions {
+  readonly mode: ChatTtsMode;
+  readonly speech?: ChatSpeechOutput;
 }
 
 export interface ChatApplicationOptions {
@@ -25,4 +32,5 @@ export interface ChatApplicationOptions {
   readonly output: NodeJS.WritableStream;
   readonly errorOutput: NodeJS.WritableStream;
   readonly tools: Readonly<ChatApplicationToolOptions>;
+  readonly tts: Readonly<ChatApplicationTtsOptions>;
 }

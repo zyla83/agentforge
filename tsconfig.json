@@ -5,6 +5,7 @@
     { "path": "./packages/example-tools" },
     { "path": "./packages/logger" },
     { "path": "./packages/ollama-client" },
+    { "path": "./packages/piper-client" },
     { "path": "./packages/plugin-sdk" },
     { "path": "./packages/provider-mock" },
     { "path": "./packages/provider-ollama" },

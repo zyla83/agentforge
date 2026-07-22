@@ -11,6 +11,7 @@
   "dependencies": {
     "@agentforge/core": "workspace:*",
     "@agentforge/example-tools": "workspace:*",
+    "@agentforge/piper-client": "workspace:*",
     "@agentforge/provider-ollama": "workspace:*",
     "@agentforge/provider-sdk": "workspace:*",
     "@agentforge/spotify-client": "workspace:*",

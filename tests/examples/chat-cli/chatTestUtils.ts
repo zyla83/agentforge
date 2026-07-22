@@ -12,6 +12,7 @@ import type {
 } from "@agentforge/core";
 import { LLMFinishReason, LLMMessageRole } from "@agentforge/provider-sdk";
 import { ChatApplication } from "../../../examples/chat-cli/src/ChatApplication.js";
+import type { ChatApplicationTtsOptions } from "../../../examples/chat-cli/src/ChatApplicationOptions.js";
 import { createChatToolOptions } from "../../../examples/chat-cli/src/chatTools.js";
 
 export function captureStream() {
@@ -93,6 +94,7 @@ export function createTestApplication(options: {
   readonly store: ConversationStore;
   readonly initialEntry: Readonly<ConversationStoreEntry>;
   readonly dataDirectory?: string;
+  readonly tts?: Readonly<ChatApplicationTtsOptions>;
 }): ChatApplication {
   return new ChatApplication({
     agent: new AgentForge(),
@@ -111,6 +113,7 @@ export function createTestApplication(options: {
     output: options.output,
     errorOutput: options.errorOutput,
     tools: createChatToolOptions("off"),
+    tts: options.tts ?? { mode: "off" },
   });
 }
 

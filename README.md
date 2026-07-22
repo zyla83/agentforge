@@ -32,6 +32,11 @@ does not provide a general confirmation engine. Spotify integration is online
 and requires Premium plus a Developer application; it is not part of the
 offline MVP. See [Spotify setup](examples/chat-cli/README.md#spotify-tools).
 
+The chat CLI also supports optional local Piper text-to-speech on Windows. It
+speaks only a completed final assistant response, remains disabled by default,
+and requires a separately obtained trusted Piper executable and voice model.
+See [local Piper speech](examples/chat-cli/README.md#local-piper-speech-output).
+
 AgentForge follows semantic versioning, but APIs may evolve during the 0.x
 series. Version 0.1.0 is the first MVP baseline, not a production-readiness or
 formal security claim.
@@ -52,7 +57,7 @@ formal security claim.
 
 ## What the MVP does not support
 
-The MVP does not include voice I/O, Windows control tools, arbitrary shell
+The MVP baseline does not include voice I/O, Windows control tools, arbitrary shell
 execution, automatic tool retries, confirmation or permission engines,
 sandboxing, transactions or rollback, remote/distributed execution, a GUI,
 additional real LLM providers, or telemetry exporters.
@@ -62,6 +67,8 @@ additional real LLM providers, or telemetry exporters.
 - Node.js 22 or newer
 - pnpm 11.12.0 through Corepack
 - Ollama only for live Ollama examples and the interactive chat
+- Windows, a trusted local Piper installation, and a compatible voice model
+  only when optional speech output is enabled
 
 ## Installation
 
@@ -145,6 +152,14 @@ Conversation files default to `.agentforge/chat` and support `/save`, `/list`,
 `/load`, `/delete`, `/export`, and `/import`. Use `/help` for the exact command
 syntax. Expected user errors are rendered without raw stack traces.
 
+Optional Windows-only Piper speech output is independent of tool mode. With
+`AGENTFORGE_CHAT_TTS=piper`, the CLI prints each completed response first,
+synthesizes the exact final text locally, plays one temporary WAV through the
+default Windows audio output, and then deletes the temporary directory. It does
+not add microphone input, a speech tool, cloud TTS, audio history, or device and
+volume controls. Piper failures leave the text response available and the chat
+usable. Configuration and security details are in the chat example README.
+
 ## Tool-enabled chat
 
 The bundled `calculator`, `format_text`, and `lookup_inventory` tools are
@@ -182,6 +197,7 @@ Application
   -> model-visible tool results
   -> final assistant response
   -> conversation persistence
+  -> optional application-owned Piper speech output
 ```
 
 The provider SDK owns provider-neutral contracts. Core owns registration and
@@ -199,6 +215,7 @@ Publishable library packages:
 - `@agentforge/example-tools` — deterministic reusable tool examples
 - `@agentforge/logger` — framework logging abstraction and Pino implementation
 - `@agentforge/ollama-client` — low-level Ollama HTTP and streaming client
+- `@agentforge/piper-client` — narrow local Piper WAV synthesis process adapter
 - `@agentforge/plugin-sdk` — plugin contracts and context
 - `@agentforge/provider-mock` — deterministic test and example LLM provider
 - `@agentforge/provider-ollama` — provider-neutral Ollama LLM adapter
@@ -370,7 +387,9 @@ temporary directories, and restored global state.
 - Ollama is the only implemented real LLM provider.
 - Tool compatibility varies by installed model and Ollama version.
 - There is no dynamic model capability probing or hardcoded model allowlist.
-- There is no voice, Windows tool library, confirmation/permission engine,
+- Voice input, continuous voice interaction, and cross-platform speech output
+  are not implemented. Optional speech output is Windows-only and uses local Piper.
+- There is no Windows tool library, confirmation/permission engine,
   retry engine, sandbox, transaction rollback, distributed execution, or GUI.
 - Filesystem storage is local and single-process oriented.
 - Package publication metadata/documentation still requires a release review.

@@ -310,6 +310,7 @@ function createApplicationHarness(
     output,
     errorOutput,
     tools: createChatToolOptions("off"),
+    tts: { mode: "off" },
   });
   return { application, initialEntry, store };
 }
@@ -658,7 +659,7 @@ describe("ChatApplication", () => {
     await output.waitFor("You: ", 2);
     input.write("/help\n");
     await output.waitFor(
-      "Available: calculator, format_text, lookup_inventory\nYou: ",
+      "Generated WAV files are temporary and deleted after playback.\nYou: ",
     );
     input.write("/info\n");
     await output.waitFor("Data directory: C:\\test-data\nYou: ");
@@ -677,6 +678,9 @@ describe("ChatApplication", () => {
     expect(output.read()).toContain("Tools mode: off");
     expect(output.read()).toContain("Registered tools: none");
     expect(output.read()).toContain("Tool execution: disabled");
+    expect(output.read()).toContain("TTS: off");
+    expect(output.read()).toContain("TTS mode: off");
+    expect(output.read()).toContain("Piper configured: no");
     expect(output.read()).toContain("Conversation reset.");
     expect(output.read().match(/Messages: 0/g)).toHaveLength(2);
     expect(errors.read()).toBe("");

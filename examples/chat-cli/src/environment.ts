@@ -1,5 +1,6 @@
+import { lstatSync } from "node:fs";
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import process from "node:process";
 import {
   DEFAULT_SPOTIFY_REDIRECT_URI,
@@ -14,6 +15,18 @@ const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_DATA_DIRECTORY = ".agentforge/chat";
 
 export type ChatToolMode = "off" | "example" | "spotify";
+export type ChatTtsMode = "off" | "piper";
+
+export interface ChatPiperEnvironment {
+  readonly executable: string;
+  readonly model: string;
+  readonly config?: string;
+}
+
+export interface ChatTtsEnvironment {
+  readonly mode: ChatTtsMode;
+  readonly piper?: Readonly<ChatPiperEnvironment>;
+}
 
 export interface ChatSpotifyEnvironment {
   readonly clientId: string;
@@ -28,12 +41,14 @@ export interface ChatEnvironment {
   readonly timeoutMs: number;
   readonly dataDirectory: string;
   readonly toolMode: ChatToolMode;
+  readonly tts: Readonly<ChatTtsEnvironment>;
   readonly spotify?: Readonly<ChatSpotifyEnvironment>;
 }
 
 export function loadChatEnvironment(
   environment: NodeJS.ProcessEnv = process.env,
   currentWorkingDirectory: string = process.cwd(),
+  platform: NodeJS.Platform = process.platform,
 ): Readonly<ChatEnvironment> {
   const baseUrl = readString(environment, "OLLAMA_BASE_URL", DEFAULT_BASE_URL);
   const model = readString(environment, "OLLAMA_MODEL", DEFAULT_MODEL);
@@ -48,6 +63,7 @@ export function loadChatEnvironment(
     readDataDirectory(environment),
   );
   const toolMode = readToolMode(environment);
+  const tts = readTtsEnvironment(environment, platform);
   const spotify =
     toolMode === "spotify" ? readSpotifyEnvironment(environment) : undefined;
 
@@ -58,8 +74,75 @@ export function loadChatEnvironment(
     timeoutMs,
     dataDirectory,
     toolMode,
+    tts,
     ...(spotify === undefined ? {} : { spotify }),
   });
+}
+
+function readTtsEnvironment(
+  environment: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+): Readonly<ChatTtsEnvironment> {
+  const configuredMode = environment.AGENTFORGE_CHAT_TTS;
+  const mode =
+    configuredMode === undefined ? "off" : configuredMode.trim().toLowerCase();
+  if (mode !== "off" && mode !== "piper") {
+    throw new Error('AGENTFORGE_CHAT_TTS must be "off" or "piper".');
+  }
+  if (mode === "off") return Object.freeze({ mode });
+  if (platform !== "win32") {
+    throw new Error("Piper speech output is supported only on Windows.");
+  }
+
+  const executable = readPiperPath(
+    environment.AGENTFORGE_PIPER_EXECUTABLE,
+    "AGENTFORGE_PIPER_EXECUTABLE",
+  );
+  const model = readPiperPath(
+    environment.AGENTFORGE_PIPER_MODEL,
+    "AGENTFORGE_PIPER_MODEL",
+    ".onnx",
+  );
+  const configuredConfig = environment.AGENTFORGE_PIPER_CONFIG;
+  const config =
+    configuredConfig === undefined
+      ? undefined
+      : readPiperPath(
+          configuredConfig,
+          "AGENTFORGE_PIPER_CONFIG",
+          ".onnx.json",
+        );
+  const piper = Object.freeze(
+    config === undefined
+      ? { executable, model }
+      : { executable, model, config },
+  );
+  return Object.freeze({ mode, piper });
+}
+
+function readPiperPath(
+  value: string | undefined,
+  name: string,
+  suffix?: string,
+): string {
+  if (value === undefined || value.length === 0) {
+    throw new Error(`${name} must be an explicit absolute file path.`);
+  }
+  if (!isAbsolute(value)) {
+    throw new Error(`${name} must be an explicit absolute file path.`);
+  }
+  if (containsControlCharacters(value)) {
+    throw new Error(`${name} must not contain control characters.`);
+  }
+  if (suffix !== undefined && !value.toLowerCase().endsWith(suffix)) {
+    throw new Error(`${name} must end in ${suffix}.`);
+  }
+  try {
+    if (!lstatSync(value).isFile()) throw new Error("not a file");
+  } catch {
+    throw new Error(`${name} must reference an existing regular file.`);
+  }
+  return value;
 }
 
 function readToolMode(environment: NodeJS.ProcessEnv): ChatToolMode {
@@ -76,6 +159,13 @@ function readToolMode(environment: NodeJS.ProcessEnv): ChatToolMode {
   throw new Error(
     'AGENTFORGE_CHAT_TOOLS must be "off", "example", or "spotify".',
   );
+}
+
+function containsControlCharacters(value: string): boolean {
+  return [...value].some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f);
+  });
 }
 
 function readSpotifyEnvironment(

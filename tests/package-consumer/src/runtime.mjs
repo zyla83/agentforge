@@ -3,6 +3,7 @@ import * as core from "@agentforge/core";
 import * as exampleTools from "@agentforge/example-tools";
 import * as logger from "@agentforge/logger";
 import * as ollamaClient from "@agentforge/ollama-client";
+import * as piperClient from "@agentforge/piper-client";
 import "@agentforge/plugin-sdk";
 import * as providerMock from "@agentforge/provider-mock";
 import * as providerOllama from "@agentforge/provider-ollama";
@@ -26,6 +27,21 @@ const packageChecks = [
   ["@agentforge/example-tools", exampleTools, ["registerExampleTools"]],
   ["@agentforge/logger", logger, ["createLogger"]],
   ["@agentforge/ollama-client", ollamaClient, ["OllamaClient"]],
+  [
+    "@agentforge/piper-client",
+    piperClient,
+    [
+      "PiperClient",
+      "PiperConfigurationError",
+      "PiperRequestError",
+      "PiperResourceError",
+      "PiperAbortError",
+      "PiperTimeoutError",
+      "PiperTransportError",
+      "PiperProcessError",
+      "PiperOutputError",
+    ],
+  ],
   ["@agentforge/plugin-sdk", undefined, []],
   ["@agentforge/provider-mock", providerMock, ["MockLLMProvider"]],
   ["@agentforge/provider-ollama", providerOllama, ["OllamaLLMProvider"]],

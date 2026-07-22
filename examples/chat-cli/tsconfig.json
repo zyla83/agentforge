@@ -11,6 +11,7 @@
   "references": [
     { "path": "../../packages/core" },
     { "path": "../../packages/example-tools" },
+    { "path": "../../packages/piper-client" },
     { "path": "../../packages/provider-ollama" },
     { "path": "../../packages/provider-sdk" },
     { "path": "../../packages/spotify-client" },

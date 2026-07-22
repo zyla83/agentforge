@@ -4,6 +4,7 @@ import {
   AgentForgeState,
   createConversation,
 } from "@agentforge/core";
+import { PiperClient } from "@agentforge/piper-client";
 import { OllamaLLMProvider } from "@agentforge/provider-ollama";
 import { ProviderHealthStatus } from "@agentforge/provider-sdk";
 import type { ProviderHealth } from "@agentforge/provider-sdk";
@@ -23,6 +24,7 @@ import { createChatProfile } from "./createChatProfile.js";
 import type { ChatSpotifyEnvironment } from "./environment.js";
 import { loadChatEnvironment } from "./environment.js";
 import { formatChatError } from "./formatChatError.js";
+import { PiperSpeechOutput } from "./tts/PiperSpeechOutput.js";
 
 async function main(): Promise<void> {
   const environment = loadChatEnvironment();
@@ -38,6 +40,7 @@ async function main(): Promise<void> {
       : createSpotifyDependencies(environment.spotify);
   const tools = createChatToolOptions(environment.toolMode, spotify);
   registerConfiguredChatTools(agent, tools, spotify);
+  const tts = createChatTts(environment);
 
   try {
     await agent.start();
@@ -68,6 +71,7 @@ async function main(): Promise<void> {
       output: process.stdout,
       errorOutput: process.stderr,
       tools,
+      tts,
     });
     await application.run();
   } finally {
@@ -75,6 +79,30 @@ async function main(): Promise<void> {
       await agent.stop();
     }
   }
+}
+
+function createChatTts(
+  environment: Readonly<ReturnType<typeof loadChatEnvironment>>,
+): {
+  readonly mode: "off" | "piper";
+  readonly speech?: PiperSpeechOutput;
+} {
+  if (environment.tts.mode === "off") return Object.freeze({ mode: "off" });
+  const configuration = environment.tts.piper;
+  if (configuration === undefined) {
+    throw new Error("Piper speech output is not configured.");
+  }
+  const client = new PiperClient({
+    executable: configuration.executable,
+    model: configuration.model,
+    ...(configuration.config === undefined
+      ? {}
+      : { config: configuration.config }),
+  });
+  return Object.freeze({
+    mode: "piper" as const,
+    speech: new PiperSpeechOutput(client, environment.timeoutMs),
+  });
 }
 
 function createSpotifyDependencies(

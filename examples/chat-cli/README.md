@@ -40,6 +40,10 @@ latest conversation automatically; use `/list` and `/load` to resume one.
 | `AGENTFORGE_REQUEST_TIMEOUT_MS` | `120000` |
 | `AGENTFORGE_CHAT_DATA_DIR` | `.agentforge/chat` relative to the current working directory |
 | `AGENTFORGE_CHAT_TOOLS` | `off` |
+| `AGENTFORGE_CHAT_TTS` | `off` |
+| `AGENTFORGE_PIPER_EXECUTABLE` | Required only when TTS mode is `piper` |
+| `AGENTFORGE_PIPER_MODEL` | Required only when TTS mode is `piper` |
+| `AGENTFORGE_PIPER_CONFIG` | Optional explicit `.onnx.json` path in Piper mode |
 | `SPOTIFY_CLIENT_ID` | Required only when tool mode is `spotify` |
 | `SPOTIFY_REDIRECT_URI` | `http://127.0.0.1:43821/callback` |
 | `AGENTFORGE_SPOTIFY_DATA_DIR` | `<home>/.agentforge/spotify` |
@@ -198,6 +202,66 @@ conversation history. Observer redaction does not remove these values from
 model-visible results or persisted history. AgentForge does not download,
 proxy, alter, synchronize, broadcast, or otherwise handle Spotify audio.
 
+## Local Piper speech output
+
+Text-to-speech is disabled by default and independent of the selected tool
+mode. Task-040 supports local Piper output only on Windows. Obtain and verify a
+trusted Piper executable, one compatible `.onnx` voice model, and its adjacent
+`.onnx.json` configuration separately; AgentForge does not download or update
+them and does not verify their origin.
+
+Set explicit absolute paths in the current PowerShell session without writing
+them to repository files:
+
+```powershell
+$env:AGENTFORGE_CHAT_TTS = "piper"
+$env:AGENTFORGE_PIPER_EXECUTABLE = "C:\path\to\trusted\piper.exe"
+$env:AGENTFORGE_PIPER_MODEL = "C:\path\to\voice.onnx"
+# Optional when Piper can use the adjacent voice.onnx.json automatically:
+$env:AGENTFORGE_PIPER_CONFIG = "C:\path\to\voice.onnx.json"
+pnpm example:chat
+```
+
+Unset the optional config variable when relying on Piper's adjacent model
+configuration:
+
+```powershell
+Remove-Item Env:AGENTFORGE_PIPER_CONFIG -ErrorAction SilentlyContinue
+```
+
+Piper mode validates all paths before the prompt opens and never searches
+`PATH`, the repository, Downloads, or the user profile. Routine banner and
+`/info` output show only whether TTS is off or configured, not the local paths.
+On non-Windows platforms, explicit Piper mode is rejected; off mode remains
+portable.
+
+For complete, streaming, and tool-enabled turns, text is shown normally and
+only the final successful assistant message is spoken once. Stream fragments,
+tool traffic, prompts, commands, errors, and restored history are never spoken.
+The next prompt waits for playback. Ctrl+C during synthesis or playback cancels
+the owned child process; a synthesis or playback failure leaves the textual
+answer visible and the next text turn remains available.
+
+Each response uses one unique OS temporary directory and `speech.wav`, removed
+after success, failure, timeout, or cancellation. Deletion is best-effort and
+not secure erasure. Conversation persistence continues to store text and does
+not store audio. The configured executable runs with the chat application's
+user privileges, receives assistant text through stdin, and is not sandboxed.
+The fixed Windows player receives only the temporary WAV path. Audible output
+may be heard or captured by people and devices in the physical environment.
+Local TTS does not make the Ollama or Spotify paths private or offline.
+
+This mode provides no speech-to-text, microphone capture, wake word, voice
+activity detection, continuous voice loop, cloud TTS, model-callable speech
+tool, audio cache, voice cloning, SSML, volume control, or device selection.
+
+Manual verification should use a short non-sensitive prompt. Confirm off mode,
+one final spoken response after text completion, one streaming response, one
+harmless Spotify read in Spotify mode, Ctrl+C cancellation, continued text chat
+after a TTS failure, clean `/exit`, and absence of WAV/model/config/history
+artifacts in `git status`. Do not record complete local paths or conversation
+content in committed evidence.
+
 ## Commands
 
 ```text
@@ -250,8 +314,9 @@ You: /import "./exports/my conversation.json"
 ## Cancellation and persistence failures
 
 Pressing Ctrl+C during generation cancels the active response and does not save
-partial output. Ctrl+C at the prompt exits. EOF and SIGTERM also shut down
-cleanly without an extra save.
+partial output. During Piper synthesis or playback it cancels the active speech
+operation and removes its temporary output. Ctrl+C at the prompt exits. EOF and
+SIGTERM also shut down cleanly without an extra save.
 
 If generation completes but saving fails, the displayed response is not added
 to subsequent context: the previous persisted conversation remains active.
@@ -275,3 +340,4 @@ does not save automatically.
 - No runtime tool-mode switching
 - No Markdown rendering
 - No model switching during a session
+- Piper speech output is Windows-only and has no microphone or voice-input path

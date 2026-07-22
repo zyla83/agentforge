@@ -11,6 +11,23 @@ import {
 import { registerExampleTools } from "@agentforge/example-tools";
 import { type Logger, createLogger } from "@agentforge/logger";
 import { OllamaClient } from "@agentforge/ollama-client";
+import {
+  PiperAbortError,
+  PiperClient,
+  PiperConfigurationError,
+  PiperOutputError,
+  PiperProcessError,
+  PiperRequestError,
+  PiperResourceError,
+  PiperTimeoutError,
+  PiperTransportError,
+} from "@agentforge/piper-client";
+import type {
+  PiperClientOptions,
+  PiperSynthesisOptions,
+  PiperSynthesisRequest,
+  PiperSynthesisResult,
+} from "@agentforge/piper-client";
 import type { Plugin } from "@agentforge/plugin-sdk";
 import { MockLLMProvider } from "@agentforge/provider-mock";
 import { OllamaLLMProvider } from "@agentforge/provider-ollama";
@@ -52,6 +69,10 @@ interface PublicTypeImports {
   readonly logger: Logger;
   readonly observability: ConversationEngineObservabilityOptions;
   readonly plugin: Plugin;
+  readonly piperClientOptions: PiperClientOptions;
+  readonly piperSynthesisOptions: PiperSynthesisOptions;
+  readonly piperSynthesisRequest: PiperSynthesisRequest;
+  readonly piperSynthesisResult: PiperSynthesisResult;
   readonly provider: LLMProvider;
   readonly spotifyAvailableDevice: SpotifyAvailableDevice;
   readonly spotifyAvailableDevices: SpotifyAvailableDevices;
@@ -77,6 +98,15 @@ void [
   registerExampleTools,
   createLogger,
   OllamaClient,
+  PiperClient,
+  PiperAbortError,
+  PiperConfigurationError,
+  PiperOutputError,
+  PiperProcessError,
+  PiperRequestError,
+  PiperResourceError,
+  PiperTimeoutError,
+  PiperTransportError,
   MockLLMProvider,
   OllamaLLMProvider,
   LLMMessageRole,

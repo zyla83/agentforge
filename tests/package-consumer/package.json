@@ -15,6 +15,7 @@
     "@agentforge/example-tools": "workspace:*",
     "@agentforge/logger": "workspace:*",
     "@agentforge/ollama-client": "workspace:*",
+    "@agentforge/piper-client": "workspace:*",
     "@agentforge/plugin-sdk": "workspace:*",
     "@agentforge/provider-mock": "workspace:*",
     "@agentforge/provider-ollama": "workspace:*",

@@ -20,13 +20,14 @@ import type {
   LLMStreamingProvider,
   ToolArguments,
 } from "@agentforge/provider-sdk";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ChatApplication } from "../../../examples/chat-cli/src/ChatApplication.js";
 import {
   createChatConversationEngine,
   createChatToolOptions,
   registerConfiguredChatTools,
 } from "../../../examples/chat-cli/src/chatTools.js";
+import type { ChatSpeechOutput } from "../../../examples/chat-cli/src/tts/ChatSpeechOutput.js";
 import { captureStream } from "./chatTestUtils.js";
 
 describe("chat CLI example tools integration", () => {
@@ -109,11 +110,27 @@ describe("chat CLI example tools integration", () => {
       result: { status: "error", error: { code: "tool_execution_failed" } },
     });
   });
+
+  it("speaks only the final answer after a tool round", async () => {
+    const speak = vi.fn<ChatSpeechOutput["speak"]>().mockResolvedValue();
+    const result = await runToolScenario(
+      { operation: "multiply", left: 7, right: 6 },
+      "The final answer is 42.",
+      { speak },
+    );
+
+    expect(result.output).toContain("Tool: calculator");
+    expect(result.output).toContain("Tool result: calculator succeeded");
+    expect(speak).toHaveBeenCalledTimes(1);
+    expect(speak.mock.calls[0]?.[0]).toBe("The final answer is 42.");
+    expect(speak.mock.calls[0]?.[0]).not.toContain("calculator");
+  });
 });
 
 async function runToolScenario(
   argumentsValue: ToolArguments,
   finalContent: string,
+  speech?: ChatSpeechOutput,
 ) {
   const provider = new ScriptedStreamingProvider(argumentsValue, finalContent);
   const agent = new AgentForge();
@@ -147,6 +164,7 @@ async function runToolScenario(
       output: output.stream,
       errorOutput: errors.stream,
       tools,
+      tts: speech === undefined ? { mode: "off" } : { mode: "piper", speech },
     });
 
     const running = application.run();

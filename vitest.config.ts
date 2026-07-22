@@ -19,6 +19,9 @@ export default defineConfig({
       "@agentforge/ollama-client": fileURLToPath(
         new URL("./packages/ollama-client/src/index.ts", import.meta.url),
       ),
+      "@agentforge/piper-client": fileURLToPath(
+        new URL("./packages/piper-client/src/index.ts", import.meta.url),
+      ),
       "@agentforge/plugin-sdk": fileURLToPath(
         new URL("./packages/plugin-sdk/src/index.ts", import.meta.url),
       ),

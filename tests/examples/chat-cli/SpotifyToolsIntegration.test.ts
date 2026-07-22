@@ -92,6 +92,7 @@ describe("chat CLI Spotify tool integration", () => {
         output: output.stream,
         errorOutput: errors.stream,
         tools,
+        tts: { mode: "off" },
       });
       const running = application.run();
       await output.waitFor("You: ");
@@ -206,6 +207,7 @@ describe("chat CLI Spotify tool integration", () => {
         output: output.stream,
         errorOutput: errors.stream,
         tools,
+        tts: { mode: "off" },
       });
       const running = application.run();
       await output.waitFor("You: ");

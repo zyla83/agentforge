@@ -6,5 +6,6 @@ coverage/
 .turbo/
 .vscode/
 .idea/
+.agentforge/
 .DS_Store
 Thumbs.db

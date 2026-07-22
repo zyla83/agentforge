@@ -25,6 +25,11 @@
   tools, bringing Spotify mode to five explicitly registered tools
 - Canonical read and modify playback scopes with one-time PKCE migration for
   legacy read-only refresh credentials
+- Opt-in Windows-only local Piper speech output for completed chat responses,
+  with direct synthesis, fixed default-device WAV playback, cancellation, and
+  temporary audio cleanup
+- `@agentforge/piper-client` with validated executable/model configuration,
+  direct stdin synthesis, typed process failures, and RIFF/WAVE output checks
 
 ### Security
 
@@ -39,6 +44,11 @@
 - Playback start runs with the authenticated user's Spotify permissions, is not
   retried after ambiguous failures, is not rolled back, and an `accepted`
   acknowledgement does not independently prove audible playback
+- Piper and voice files are supplied and trusted by the user, run with the chat
+  application's privileges, and are not sandboxed or downloaded by AgentForge
+- Assistant text is passed to local Piper through stdin; generated WAV deletion
+  is best-effort rather than secure erasure, and audible output remains a
+  physical-environment side effect
 
 ## v0.1.0 (2026-07-20)
 

@@ -16,6 +16,7 @@ import type {
 import { ProviderAbortError } from "@agentforge/provider-sdk";
 import type { ChatApplicationOptions } from "./ChatApplicationOptions.js";
 import type { ChatApplicationToolOptions } from "./ChatApplicationOptions.js";
+import type { ChatApplicationTtsOptions } from "./ChatApplicationOptions.js";
 import { ChatCommandType } from "./ChatCommand.js";
 import type { ChatCommand } from "./ChatCommand.js";
 import { formatConversationList } from "./commands/formatConversationList.js";
@@ -47,6 +48,11 @@ Tool configuration:
   Set AGENTFORGE_CHAT_TOOLS=spotify for Spotify inspection, search, and playback start.
   Spotify mode includes an external side-effect tool that can start a track or playlist.
   Available: calculator, format_text, lookup_inventory
+
+Speech configuration:
+  Set AGENTFORGE_CHAT_TTS=piper to speak final assistant responses locally on Windows.
+  Piper speech is not a model tool and does not use a microphone.
+  Generated WAV files are temporary and deleted after playback.
 `;
 
 export class ChatApplication {
@@ -59,9 +65,11 @@ export class ChatApplication {
   private readonly output: NodeJS.WritableStream;
   private readonly errorOutput: NodeJS.WritableStream;
   private readonly tools: Readonly<ChatApplicationToolOptions>;
+  private readonly tts: Readonly<ChatApplicationTtsOptions>;
   private conversation: Conversation;
   private currentRevision: number | undefined;
   private activeController: ConversationTurnController | undefined;
+  private activeOperation: "response" | "speech" | undefined;
   private promptController: AbortController | undefined;
   private readline: Interface | undefined;
   private running = false;
@@ -81,6 +89,15 @@ export class ChatApplication {
     this.tools = Object.freeze({
       mode: options.tools.mode,
       definitions: Object.freeze([...options.tools.definitions]),
+    });
+    if (options.tts.mode === "piper" && options.tts.speech === undefined) {
+      throw new Error("Piper speech output is not configured.");
+    }
+    this.tts = Object.freeze({
+      mode: options.tts.mode,
+      ...(options.tts.speech === undefined
+        ? {}
+        : { speech: options.tts.speech }),
     });
   }
 
@@ -147,7 +164,11 @@ export class ChatApplication {
     if (this.activeController !== undefined) {
       if (this.activeController.aborted) return;
       if (this.assistantLineOpen) this.output.write("\n");
-      this.output.write("Cancelling current response...\n");
+      this.output.write(
+        this.activeOperation === "speech"
+          ? "Cancelling current speech...\n"
+          : "Cancelling current response...\n",
+      );
       this.assistantLineOpen = false;
       this.cancelActiveTurn(new Error("Terminal interrupt requested"));
       return;
@@ -286,14 +307,16 @@ export class ChatApplication {
   private printInfo(): void {
     const toolNames = this.getToolNames();
     this.output.write(
-      `Profile: ${this.profile.id}\nProvider: ${this.profile.provider ?? "default"}\nModel: ${this.profile.model ?? "unspecified"}\nTools mode: ${this.tools.mode}\nRegistered tools: ${toolNames.length > 0 ? toolNames.join(", ") : "none"}\nTool execution: ${this.tools.mode === "off" ? "disabled" : "enabled"}\nConversation ID: ${this.conversation.id}\nMessages: ${this.conversation.messages.length}\nRevision: ${this.currentRevision ?? "unsaved"}\nData directory: ${this.dataDirectory}\n`,
+      `Profile: ${this.profile.id}\nProvider: ${this.profile.provider ?? "default"}\nModel: ${this.profile.model ?? "unspecified"}\nTools mode: ${this.tools.mode}\nRegistered tools: ${toolNames.length > 0 ? toolNames.join(", ") : "none"}\nTool execution: ${this.tools.mode === "off" ? "disabled" : "enabled"}\nTTS mode: ${this.tts.mode}\nPiper configured: ${this.tts.mode === "piper" ? "yes" : "no"}\nConversation ID: ${this.conversation.id}\nMessages: ${this.conversation.messages.length}\nRevision: ${this.currentRevision ?? "unsaved"}\nData directory: ${this.dataDirectory}\n`,
     );
   }
 
   private async executeTurn(content: string): Promise<void> {
     const controller = createConversationTurnController();
     this.activeController = controller;
+    this.activeOperation = "response";
     let completedConversation: Conversation | undefined;
+    let completedAssistantContent: string | undefined;
     let receivedNonEmptyDelta = false;
     let assistantPrefixWritten = false;
 
@@ -328,6 +351,7 @@ export class ChatApplication {
         }
         if (event.type === "completed") {
           completedConversation = event.conversation;
+          completedAssistantContent = event.assistantMessage.content;
           if (!receivedNonEmptyDelta) {
             const completedContent = event.assistantMessage.content;
             if (completedContent.length > 0) {
@@ -356,6 +380,27 @@ export class ChatApplication {
         );
         this.errorOutput.write(`${formatChatError(error)}\n`);
       }
+
+      if (
+        this.tts.mode === "piper" &&
+        completedAssistantContent !== undefined &&
+        completedAssistantContent.length > 0
+      ) {
+        this.activeOperation = "speech";
+        try {
+          await this.tts.speech?.speak(completedAssistantContent, {
+            signal: controller.signal,
+          });
+        } catch {
+          if (controller.aborted) {
+            this.output.write("Speech cancelled.\n");
+          } else {
+            this.errorOutput.write(
+              "Text-to-speech failed. The text response remains available.\n",
+            );
+          }
+        }
+      }
     } catch (error) {
       this.closeAssistantLine();
       if (
@@ -370,6 +415,7 @@ export class ChatApplication {
     } finally {
       if (this.activeController === controller) {
         this.activeController = undefined;
+        this.activeOperation = undefined;
       }
     }
   }
@@ -381,7 +427,7 @@ export class ChatApplication {
         ? "off"
         : `${this.tools.mode} (${toolNames.join(", ")})`;
     this.output.write(
-      `AgentForge Interactive Chat\nProvider: ${this.profile.provider ?? "default"}\nModel: ${this.profile.model ?? "unspecified"}\nTools: ${tools}\nType /help for commands.\n`,
+      `AgentForge Interactive Chat\nProvider: ${this.profile.provider ?? "default"}\nModel: ${this.profile.model ?? "unspecified"}\nTools: ${tools}\nTTS: ${this.tts.mode}\nType /help for commands.\n`,
     );
   }
 
