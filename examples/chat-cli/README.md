@@ -18,12 +18,16 @@ server, streams assistant responses, and persists immutable conversations with
 - A local Ollama installation
 - The configured model installed locally
 
+Install repository prerequisites and optional live components through the
+[central installation guide](../../docs/INSTALLATION.md). Ollama, Spotify, and
+Piper are not required by deterministic repository verification.
+
 ## Start
 
 ```bash
-ollama serve
 ollama pull llama3.1:8b
-pnpm install
+pnpm install --frozen-lockfile
+pnpm build
 pnpm example:chat
 ```
 
@@ -47,6 +51,10 @@ latest conversation automatically; use `/list` and `/load` to resume one.
 | `SPOTIFY_CLIENT_ID` | Required only when tool mode is `spotify` |
 | `SPOTIFY_REDIRECT_URI` | `http://127.0.0.1:43821/callback` |
 | `AGENTFORGE_SPOTIFY_DATA_DIR` | `<home>/.agentforge/spotify` |
+
+The canonical validation rules, conditional requirements, and setup examples
+for every variable are in the
+[environment variable reference](../../docs/INSTALLATION.md#environment-variable-reference).
 
 Relative data-directory overrides are resolved from the current working
 directory. The system prompt becomes an immutable agent profile instruction and
@@ -115,16 +123,11 @@ not duplicated.
 
 ## Spotify tools
 
-Spotify mode is an online, opt-in integration. It requires Spotify Premium, a
-Spotify Developer application, and an internet connection. Register this exact
-redirect URI in the Developer Dashboard:
-
-```text
-http://127.0.0.1:43821/callback
-```
-
-Then provide the non-secret Client ID and select the dedicated mode. Do not
-configure or paste a client secret.
+Spotify mode is an online, opt-in integration. Complete the canonical
+[Spotify setup](../../docs/INSTALLATION.md#optional-spotify-setup), including
+the Premium, Development Mode, redirect URI, PKCE, credential, and privacy
+requirements, before selecting the dedicated mode. Provide only the non-secret
+Client ID; AgentForge does not accept a client secret.
 
 PowerShell:
 
@@ -142,13 +145,10 @@ set SPOTIFY_CLIENT_ID=your-client-id
 pnpm example:chat
 ```
 
-On first use, the CLI prints an authorization URL. Open it manually and approve
-exactly `user-read-playback-state` and `user-modify-playback-state`. Upgrading a
-credential created by the earlier read-only integration requires one new PKCE
-authorization; the old credential is retained if migration fails. Subsequent
-starts refresh silently. The temporary callback listens on IPv4 loopback only
-and closes after authorization, failure, timeout, or cancellation. The CLI does
-not open a browser itself.
+On first use, the CLI prints an authorization URL. Open it manually. Upgrading
+a credential created by the earlier read-only integration requires one new
+PKCE authorization; the old credential is retained if migration fails.
+Subsequent starts refresh silently. The CLI does not open a browser itself.
 
 Spotify mode registers exactly these tools in this order:
 
@@ -205,10 +205,10 @@ proxy, alter, synchronize, broadcast, or otherwise handle Spotify audio.
 ## Local Piper speech output
 
 Text-to-speech is disabled by default and independent of the selected tool
-mode. Task-040 supports local Piper output only on Windows. Obtain and verify a
-trusted Piper executable, one compatible `.onnx` voice model, and its adjacent
-`.onnx.json` configuration separately; AgentForge does not download or update
-them and does not verify their origin.
+mode. AgentForge supports local Piper output only on Windows. Complete the
+canonical [Piper installation and voice setup](../../docs/INSTALLATION.md#optional-piper-tts-setup)
+first. AgentForge does not download, update, sandbox, or verify the origin of
+the executable or voice.
 
 Set explicit absolute paths in the current PowerShell session without writing
 them to repository files:

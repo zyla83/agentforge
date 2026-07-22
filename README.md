@@ -30,12 +30,12 @@ search, device inspection, and constrained track or playlist playback start to
 the Ollama chat CLI. Playback start is an external side effect and the framework
 does not provide a general confirmation engine. Spotify integration is online
 and requires Premium plus a Developer application; it is not part of the
-offline MVP. See [Spotify setup](examples/chat-cli/README.md#spotify-tools).
+offline MVP. See [Spotify setup](docs/INSTALLATION.md#optional-spotify-setup).
 
 The chat CLI also supports optional local Piper text-to-speech on Windows. It
 speaks only a completed final assistant response, remains disabled by default,
 and requires a separately obtained trusted Piper executable and voice model.
-See [local Piper speech](examples/chat-cli/README.md#local-piper-speech-output).
+See [installation and external dependencies](docs/INSTALLATION.md).
 
 AgentForge follows semantic versioning, but APIs may evolve during the 0.x
 series. Version 0.1.0 is the first MVP baseline, not a production-readiness or
@@ -64,11 +64,17 @@ additional real LLM providers, or telemetry exporters.
 
 ## Requirements
 
-- Node.js 22 or newer
-- pnpm 11.12.0 through Corepack
-- Ollama only for live Ollama examples and the interactive chat
-- Windows, a trusted local Piper installation, and a compatible voice model
-  only when optional speech output is enabled
+| Capability | Classification | External requirements |
+| --- | --- | --- |
+| Install, build, and deterministic verification | Required | Git, Node.js 22 or newer, and pnpm 11.12.0 through a working Corepack or equivalent official pnpm installation |
+| Live Ollama chat | Optional | Ollama and a locally installed model |
+| Spotify tools | Optional | Ollama chat tool orchestration, internet access, Spotify Premium, and a Spotify Developer application |
+| Piper speech output | Optional | Windows chat CLI, Ollama live chat, a trusted Piper installation, and a compatible ONNX voice model and configuration |
+
+Ollama, Spotify, and Piper are not required for deterministic build and test.
+See [Installation and external dependencies](docs/INSTALLATION.md) for the
+canonical setup, environment variables, official sources, and security
+boundaries.
 
 ## Installation
 
@@ -122,10 +128,10 @@ console.log(result.assistantMessage.content);
 
 ## Interactive chat
 
-Install Ollama, select any installed model appropriate for your use case, then:
+Follow the [optional Ollama setup](docs/INSTALLATION.md#optional-ollama-installation),
+select an installed model appropriate for your use case, then:
 
 ```bash
-ollama serve
 ollama pull <model>
 pnpm build
 pnpm example:chat
@@ -158,7 +164,8 @@ synthesizes the exact final text locally, plays one temporary WAV through the
 default Windows audio output, and then deletes the temporary directory. It does
 not add microphone input, a speech tool, cloud TTS, audio history, or device and
 volume controls. Piper failures leave the text response available and the chat
-usable. Configuration and security details are in the chat example README.
+usable. Installation, configuration, and security details are in the
+[central installation guide](docs/INSTALLATION.md#optional-piper-tts-setup).
 
 ## Tool-enabled chat
 
@@ -182,8 +189,8 @@ pnpm example:chat
 
 The CLI reports tool start and completion, sends structured results back to the
 model, and persists completed V2 tool history. Invalid tool mode values are
-rejected with the valid `off` and `example` values. Tool mode cannot be changed
-during a running CLI session.
+rejected with the valid `off`, `example`, and `spotify` values. Tool mode cannot
+be changed during a running CLI session.
 
 ## Architecture
 
