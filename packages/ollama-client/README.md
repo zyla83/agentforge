@@ -18,3 +18,7 @@ const version = await client.getVersion();
 The client classifies connection, HTTP, response, timeout, and cancellation
 failures. It does not start Ollama, install models, probe model capabilities, or
 retry requests automatically.
+
+Ollama and its models are external installations and are not required for
+deterministic repository verification. See the canonical
+[Ollama installation guide](../../docs/INSTALLATION.md#optional-ollama-installation).

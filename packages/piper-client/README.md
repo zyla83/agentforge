@@ -7,6 +7,11 @@
 A narrow local process adapter for synthesizing one WAV file with a trusted,
 user-installed Piper executable and compatible ONNX voice model.
 
+Install Piper and retrieve a licensed voice separately through the canonical
+[Piper setup guide](../../docs/INSTALLATION.md#optional-piper-tts-setup).
+AgentForge does not download or trust these external files on the user's
+behalf.
+
 ```ts
 import { PiperClient } from "@agentforge/piper-client";
 

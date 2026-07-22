@@ -16,6 +16,12 @@ especially playback writes with ambiguous outcomes, are never retried.
 
 ## Prerequisites
 
+Complete the canonical
+[Spotify application and authorization setup](../../docs/INSTALLATION.md#optional-spotify-setup).
+The central guide records current Development Mode limits, environment
+variables, credential removal, and troubleshooting without duplicating them
+here.
+
 - internet access;
 - Spotify Premium;
 - a Spotify Developer application;

@@ -18,3 +18,5 @@ const provider = new OllamaLLMProvider({
 
 Ollama must be installed and running separately. Declared adapter support for
 tools does not prove that every installed model can produce valid tool calls.
+See the canonical
+[Ollama installation and environment setup](../../docs/INSTALLATION.md#optional-ollama-installation).

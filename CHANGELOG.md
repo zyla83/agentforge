@@ -11,6 +11,8 @@
 - A reusable visual identity asset set with documentation banners, light and
   dark logos, package icons, social artwork, and favicon variants
 - Package-level README coverage and manifest descriptions across the workspace
+- A central installation guide separating deterministic repository setup from
+  optional Ollama, Spotify, and Piper runtime dependencies
 - Spotify Authorization Code with PKCE, refresh-token rotation, and immutable
   current-playback inspection through `@agentforge/spotify-client`
 - Opt-in `AGENTFORGE_CHAT_TOOLS=spotify` mode with the read-only

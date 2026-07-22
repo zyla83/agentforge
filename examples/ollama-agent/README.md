@@ -19,10 +19,13 @@ deterministic.
 - The configured model installed locally
 - Network access only to the configured Ollama endpoint
 
+Ollama is installed separately and is not required for deterministic examples
+or CI. Follow the canonical
+[Ollama installation and environment setup](../../docs/INSTALLATION.md#optional-ollama-installation).
+
 ## Run
 
 ```bash
-ollama serve
 ollama pull <model>
 pnpm build
 pnpm example:ollama
