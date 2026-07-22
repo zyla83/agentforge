@@ -25,14 +25,30 @@ or CI. Follow the canonical
 
 ## Run
 
+Replace `<model>` consistently with the exact installed model name shown by
+`ollama list`.
+
+POSIX-compatible shell:
+
 ```bash
 ollama pull <model>
 pnpm build
+OLLAMA_MODEL="<model>" pnpm example:ollama
+```
+
+PowerShell:
+
+```powershell
+ollama pull <model>
+pnpm build
+$env:OLLAMA_MODEL = "<model>"
 pnpm example:ollama
 ```
 
-Set the model and endpoint with the environment variables documented by the
-example's startup error. A successful run reports provider health and prints a
-generated response. If Ollama is unavailable or the model is missing, the
-example exits with a typed, actionable provider error. It does not download or
-remove models and creates no conversation storage.
+`OLLAMA_MODEL` selects the model, and `OLLAMA_BASE_URL` overrides the default
+endpoint. See the canonical
+[environment variable reference](../../docs/INSTALLATION.md#environment-variable-reference).
+A successful run reports provider health and prints a generated response. If
+Ollama is unavailable or the model is missing, the example exits with a typed,
+actionable provider error. It does not download or remove models and creates no
+conversation storage.
