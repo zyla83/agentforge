@@ -15,6 +15,7 @@ import type {
 } from "@agentforge/core";
 import { ProviderAbortError } from "@agentforge/provider-sdk";
 import type { ChatApplicationOptions } from "./ChatApplicationOptions.js";
+import type { ChatApplicationSttOptions } from "./ChatApplicationOptions.js";
 import type { ChatApplicationToolOptions } from "./ChatApplicationOptions.js";
 import type { ChatApplicationTtsOptions } from "./ChatApplicationOptions.js";
 import { ChatCommandType } from "./ChatCommand.js";
@@ -28,6 +29,8 @@ import { parseChatCommand } from "./parseChatCommand.js";
 import {
   formatToolCallCompleted,
   formatToolCallStarted,
+  sanitizeTerminalText,
+  truncateTerminalPreview,
 } from "./tools/formatToolEvent.js";
 
 const HELP_TEXT = `Commands:
@@ -40,6 +43,7 @@ const HELP_TEXT = `Commands:
   /delete <conversation-id>   Delete a saved conversation
   /export <file-path>         Export the current conversation
   /import <file-path>         Import and save a conversation
+  /voice [seconds]            Record and transcribe 1-30 seconds of microphone input
   /exit                       Exit the chat
   /quit                       Exit the chat
 
@@ -50,9 +54,10 @@ Tool configuration:
   Available: calculator, format_text, lookup_inventory
 
 Speech configuration:
+  Set AGENTFORGE_CHAT_STT=whisper to enable explicit /voice input locally on Windows.
+  Voice input is half-duplex and records only after an explicit /voice command.
   Set AGENTFORGE_CHAT_TTS=piper to speak final assistant responses locally on Windows.
-  Piper speech is not a model tool and does not use a microphone.
-  Generated WAV files are temporary and deleted after playback.
+  STT and TTS are not model tools. Temporary audio deletion is best effort.
 `;
 
 export class ChatApplication {
@@ -66,10 +71,16 @@ export class ChatApplication {
   private readonly errorOutput: NodeJS.WritableStream;
   private readonly tools: Readonly<ChatApplicationToolOptions>;
   private readonly tts: Readonly<ChatApplicationTtsOptions>;
+  private readonly stt: Readonly<ChatApplicationSttOptions>;
   private conversation: Conversation;
   private currentRevision: number | undefined;
   private activeController: ConversationTurnController | undefined;
-  private activeOperation: "response" | "speech" | undefined;
+  private activeOperation:
+    | "response"
+    | "speech"
+    | "recording"
+    | "transcription"
+    | undefined;
   private promptController: AbortController | undefined;
   private readline: Interface | undefined;
   private running = false;
@@ -99,6 +110,26 @@ export class ChatApplication {
         ? {}
         : { speech: options.tts.speech }),
     });
+    const stt = options.stt ?? { mode: "off" as const };
+    if (stt.mode === "whisper") {
+      if (
+        stt.speech === undefined ||
+        !Number.isInteger(stt.defaultDurationSeconds) ||
+        stt.defaultDurationSeconds < 1 ||
+        stt.defaultDurationSeconds > 30 ||
+        stt.language.length === 0
+      ) {
+        throw new Error("Local whisper.cpp input is not configured.");
+      }
+      this.stt = Object.freeze({
+        mode: "whisper" as const,
+        speech: stt.speech,
+        language: stt.language,
+        defaultDurationSeconds: stt.defaultDurationSeconds,
+      });
+    } else {
+      this.stt = Object.freeze({ mode: "off" as const });
+    }
   }
 
   async run(): Promise<void> {
@@ -164,11 +195,7 @@ export class ChatApplication {
     if (this.activeController !== undefined) {
       if (this.activeController.aborted) return;
       if (this.assistantLineOpen) this.output.write("\n");
-      this.output.write(
-        this.activeOperation === "speech"
-          ? "Cancelling current speech...\n"
-          : "Cancelling current response...\n",
-      );
+      this.output.write(`${this.getCancellationNotice()}\n`);
       this.assistantLineOpen = false;
       this.cancelActiveTurn(new Error("Terminal interrupt requested"));
       return;
@@ -222,6 +249,10 @@ export class ChatApplication {
         return;
       case ChatCommandType.Import:
         await this.importConversation(command.filePath);
+        return;
+      case ChatCommandType.Voice:
+        await this.executeVoiceTurn(command.durationSeconds);
+        return;
     }
   }
 
@@ -307,8 +338,63 @@ export class ChatApplication {
   private printInfo(): void {
     const toolNames = this.getToolNames();
     this.output.write(
-      `Profile: ${this.profile.id}\nProvider: ${this.profile.provider ?? "default"}\nModel: ${this.profile.model ?? "unspecified"}\nTools mode: ${this.tools.mode}\nRegistered tools: ${toolNames.length > 0 ? toolNames.join(", ") : "none"}\nTool execution: ${this.tools.mode === "off" ? "disabled" : "enabled"}\nTTS mode: ${this.tts.mode}\nPiper configured: ${this.tts.mode === "piper" ? "yes" : "no"}\nConversation ID: ${this.conversation.id}\nMessages: ${this.conversation.messages.length}\nRevision: ${this.currentRevision ?? "unsaved"}\nData directory: ${this.dataDirectory}\n`,
+      `Profile: ${this.profile.id}\nProvider: ${this.profile.provider ?? "default"}\nModel: ${this.profile.model ?? "unspecified"}\nTools mode: ${this.tools.mode}\nRegistered tools: ${toolNames.length > 0 ? toolNames.join(", ") : "none"}\nTool execution: ${this.tools.mode === "off" ? "disabled" : "enabled"}\nSTT mode: ${this.stt.mode}\nWhisper configured: ${this.stt.mode === "whisper" ? "yes" : "no"}\nSTT language: ${this.stt.mode === "whisper" ? this.stt.language : "not configured"}\nVoice recording seconds: ${this.stt.mode === "whisper" ? this.stt.defaultDurationSeconds : "not configured"}\nTTS mode: ${this.tts.mode}\nPiper configured: ${this.tts.mode === "piper" ? "yes" : "no"}\nConversation ID: ${this.conversation.id}\nMessages: ${this.conversation.messages.length}\nRevision: ${this.currentRevision ?? "unsaved"}\nData directory: ${this.dataDirectory}\n`,
     );
+  }
+
+  private async executeVoiceTurn(
+    requestedDurationSeconds: number | undefined,
+  ): Promise<void> {
+    if (this.stt.mode === "off") {
+      this.errorOutput.write(
+        "Voice input is not configured. Set AGENTFORGE_CHAT_STT=whisper and configure the required local files.\n",
+      );
+      return;
+    }
+    const durationSeconds =
+      requestedDurationSeconds ?? this.stt.defaultDurationSeconds;
+    const controller = createConversationTurnController();
+    this.activeController = controller;
+    this.activeOperation = "recording";
+    this.output.write(
+      `Recording voice input for ${durationSeconds} seconds...\n`,
+    );
+    let content: string | undefined;
+    try {
+      const result = await this.stt.speech.transcribe(durationSeconds, {
+        signal: controller.signal,
+        onPhase: (phase) => {
+          if (this.activeController === controller) {
+            this.activeOperation = phase;
+          }
+        },
+      });
+      const preview = truncateTerminalPreview(
+        sanitizeTerminalText(result.text),
+      ).trim();
+      if (preview.length === 0 || result.text.trim().length === 0) {
+        this.errorOutput.write(
+          "Voice input did not produce usable text. No conversation turn was started.\n",
+        );
+        return;
+      }
+      this.output.write(`You (voice): ${preview}\n`);
+      content = result.text;
+    } catch {
+      if (controller.aborted) {
+        this.output.write("Voice input cancelled.\n");
+      } else {
+        this.errorOutput.write(
+          "Voice input failed. Text chat remains available.\n",
+        );
+      }
+    } finally {
+      if (this.activeController === controller) {
+        this.activeController = undefined;
+        this.activeOperation = undefined;
+      }
+    }
+    if (content !== undefined) await this.executeTurn(content);
   }
 
   private async executeTurn(content: string): Promise<void> {
@@ -427,12 +513,25 @@ export class ChatApplication {
         ? "off"
         : `${this.tools.mode} (${toolNames.join(", ")})`;
     this.output.write(
-      `AgentForge Interactive Chat\nProvider: ${this.profile.provider ?? "default"}\nModel: ${this.profile.model ?? "unspecified"}\nTools: ${tools}\nTTS: ${this.tts.mode}\nType /help for commands.\n`,
+      `AgentForge Interactive Chat\nProvider: ${this.profile.provider ?? "default"}\nModel: ${this.profile.model ?? "unspecified"}\nTools: ${tools}\nSTT: ${this.stt.mode}\nTTS: ${this.tts.mode}\nType /help for commands.\n`,
     );
   }
 
   private getToolNames(): readonly string[] {
     return this.tools.definitions.map(({ name }) => name);
+  }
+
+  private getCancellationNotice(): string {
+    switch (this.activeOperation) {
+      case "speech":
+        return "Cancelling current speech...";
+      case "recording":
+        return "Cancelling microphone recording...";
+      case "transcription":
+        return "Cancelling voice transcription...";
+      default:
+        return "Cancelling current response...";
+    }
   }
 
   private closeAssistantLine(): void {

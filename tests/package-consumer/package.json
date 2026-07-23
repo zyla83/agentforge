@@ -22,6 +22,7 @@
     "@agentforge/provider-sdk": "workspace:*",
     "@agentforge/shared": "workspace:*",
     "@agentforge/spotify-client": "workspace:*",
-    "@agentforge/storage-filesystem": "workspace:*"
+    "@agentforge/storage-filesystem": "workspace:*",
+    "@agentforge/whisper-client": "workspace:*"
   }
 }

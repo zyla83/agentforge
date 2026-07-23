@@ -58,6 +58,18 @@ export function parseChatCommand(
     );
     return Object.freeze({ type: name, filePath });
   }
+  if (name === ChatCommandType.Voice) {
+    if (argumentText.length === 0) {
+      return Object.freeze({ type: ChatCommandType.Voice });
+    }
+    if (!/^(?:[1-9]|[12][0-9]|30)$/u.test(argumentText)) {
+      throw new ChatCommandParseError("Usage: /voice [seconds] (1-30)");
+    }
+    return Object.freeze({
+      type: ChatCommandType.Voice,
+      durationSeconds: Number(argumentText),
+    });
+  }
 
   const displayName = name.length === 0 ? "/" : `/${name}`;
   throw new ChatCommandParseError(

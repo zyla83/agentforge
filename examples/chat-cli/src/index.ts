@@ -14,6 +14,7 @@ import {
   SpotifyClient,
 } from "@agentforge/spotify-client";
 import { createFilesystemConversationStore } from "@agentforge/storage-filesystem";
+import { WhisperClient } from "@agentforge/whisper-client";
 import { ChatApplication } from "./ChatApplication.js";
 import {
   createChatConversationEngine,
@@ -24,6 +25,8 @@ import { createChatProfile } from "./createChatProfile.js";
 import type { ChatSpotifyEnvironment } from "./environment.js";
 import { loadChatEnvironment } from "./environment.js";
 import { formatChatError } from "./formatChatError.js";
+import { WhisperSpeechInput } from "./stt/WhisperSpeechInput.js";
+import { WindowsMicrophoneRecorder } from "./stt/WindowsMicrophoneRecorder.js";
 import { PiperSpeechOutput } from "./tts/PiperSpeechOutput.js";
 
 async function main(): Promise<void> {
@@ -41,6 +44,7 @@ async function main(): Promise<void> {
   const tools = createChatToolOptions(environment.toolMode, spotify);
   registerConfiguredChatTools(agent, tools, spotify);
   const tts = createChatTts(environment);
+  const stt = createChatStt(environment);
 
   try {
     await agent.start();
@@ -72,6 +76,7 @@ async function main(): Promise<void> {
       errorOutput: process.stderr,
       tools,
       tts,
+      stt,
     });
     await application.run();
   } finally {
@@ -79,6 +84,38 @@ async function main(): Promise<void> {
       await agent.stop();
     }
   }
+}
+
+function createChatStt(
+  environment: Readonly<ReturnType<typeof loadChatEnvironment>>,
+):
+  | { readonly mode: "off" }
+  | {
+      readonly mode: "whisper";
+      readonly speech: WhisperSpeechInput;
+      readonly language: string;
+      readonly defaultDurationSeconds: number;
+    } {
+  if (environment.stt.mode === "off") return Object.freeze({ mode: "off" });
+  const configuration = environment.stt.whisper;
+  if (configuration === undefined) {
+    throw new Error("Local whisper.cpp input is not configured.");
+  }
+  const recorder = new WindowsMicrophoneRecorder({
+    executable: configuration.ffmpegExecutable,
+    deviceName: configuration.microphoneDevice,
+  });
+  const client = new WhisperClient({
+    executable: configuration.whisperExecutable,
+    model: configuration.whisperModel,
+    language: configuration.language,
+  });
+  return Object.freeze({
+    mode: "whisper" as const,
+    speech: new WhisperSpeechInput(recorder, client, environment.timeoutMs),
+    language: configuration.language,
+    defaultDurationSeconds: configuration.recordingSeconds,
+  });
 }
 
 function createChatTts(

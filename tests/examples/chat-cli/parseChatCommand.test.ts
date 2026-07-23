@@ -52,9 +52,17 @@ describe("parseChatCommand", () => {
         filePath: "./exports/conversation one.json",
       },
     ],
+    ["/voice 1", { type: ChatCommandType.Voice, durationSeconds: 1 }],
+    ["/VOICE 30", { type: ChatCommandType.Voice, durationSeconds: 30 }],
   ])("parses argument command %s", (input, expected) => {
     const command = parseChatCommand(input);
     expect(command).toEqual(expected);
+    expect(Object.isFrozen(command)).toBe(true);
+  });
+
+  it("parses /voice without a duration as a frozen default command", () => {
+    const command = parseChatCommand("/voice");
+    expect(command).toEqual({ type: ChatCommandType.Voice });
     expect(Object.isFrozen(command)).toBe(true);
   });
 
@@ -76,6 +84,14 @@ describe("parseChatCommand", () => {
     ["/export", "Usage: /export <file-path>"],
     ['/import "missing', "Usage: /import <file-path>"],
     ["/export 'one' trailing", "Usage: /export <file-path>"],
+    ["/voice 0", "Usage: /voice [seconds] (1-30)"],
+    ["/voice 31", "Usage: /voice [seconds] (1-30)"],
+    ["/voice +5", "Usage: /voice [seconds] (1-30)"],
+    ["/voice -5", "Usage: /voice [seconds] (1-30)"],
+    ["/voice 5.0", "Usage: /voice [seconds] (1-30)"],
+    ["/voice 5s", "Usage: /voice [seconds] (1-30)"],
+    ["/voice 5 extra", "Usage: /voice [seconds] (1-30)"],
+    ['/voice ""', "Usage: /voice [seconds] (1-30)"],
   ])("rejects malformed command %s", (input, message) => {
     expect(() => parseChatCommand(input)).toThrow(
       expect.objectContaining<Partial<ChatCommandParseError>>({ message }),

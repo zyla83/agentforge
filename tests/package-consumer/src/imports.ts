@@ -62,6 +62,23 @@ import {
   FilesystemConversationStore,
   createFilesystemConversationStore,
 } from "@agentforge/storage-filesystem";
+import {
+  WhisperAbortError,
+  WhisperClient,
+  WhisperConfigurationError,
+  WhisperOutputError,
+  WhisperProcessError,
+  WhisperRequestError,
+  WhisperResourceError,
+  WhisperTimeoutError,
+  WhisperTransportError,
+} from "@agentforge/whisper-client";
+import type {
+  WhisperClientOptions,
+  WhisperTranscriptionOptions,
+  WhisperTranscriptionRequest,
+  WhisperTranscriptionResult,
+} from "@agentforge/whisper-client";
 
 interface PublicTypeImports {
   readonly conversationEngine: ConversationEngine;
@@ -86,6 +103,10 @@ interface PublicTypeImports {
   readonly toolEvent: ToolExecutionObserverEvent;
   readonly toolRedactor: ToolExecutionRedactor;
   readonly tool: ToolDefinition;
+  readonly whisperClientOptions: WhisperClientOptions;
+  readonly whisperTranscriptionOptions: WhisperTranscriptionOptions;
+  readonly whisperTranscriptionRequest: WhisperTranscriptionRequest;
+  readonly whisperTranscriptionResult: WhisperTranscriptionResult;
 }
 
 const publicTypeImports = undefined as unknown as PublicTypeImports;
@@ -120,5 +141,14 @@ void [
   SPOTIFY_PLAYBACK_SCOPES,
   FilesystemConversationStore,
   createFilesystemConversationStore,
+  WhisperClient,
+  WhisperAbortError,
+  WhisperConfigurationError,
+  WhisperOutputError,
+  WhisperProcessError,
+  WhisperRequestError,
+  WhisperResourceError,
+  WhisperTimeoutError,
+  WhisperTransportError,
   publicTypeImports,
 ];

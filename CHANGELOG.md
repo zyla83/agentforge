@@ -32,6 +32,11 @@
   temporary audio cleanup
 - `@agentforge/piper-client` with validated executable/model configuration,
   direct stdin synthesis, typed process failures, and RIFF/WAVE output checks
+- Opt-in Windows-only `/voice [seconds]` microphone transcription through
+  explicit FFmpeg DirectShow capture and local whisper.cpp processing
+- `@agentforge/whisper-client` with immutable requests and results, fixed direct
+  process arguments, bounded UTF-8 transcript validation, cancellation, and
+  typed failures
 
 ### Security
 
@@ -51,6 +56,12 @@
 - Assistant text is passed to local Piper through stdin; generated WAV deletion
   is best-effort rather than secure erasure, and audible output remains a
   physical-environment side effect
+- FFmpeg, whisper.cpp, and model files are supplied and trusted by the user,
+  run with the chat application's privileges, and are not sandboxed or
+  downloaded by AgentForge
+- Temporary microphone audio and transcript files are deleted best effort, not
+  securely erased; submitted recognized text becomes model-visible,
+  tool-relevant, and persisted like typed user content
 
 ## v0.1.0 (2026-07-20)
 

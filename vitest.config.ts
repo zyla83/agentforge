@@ -43,6 +43,9 @@ export default defineConfig({
       "@agentforge/storage-filesystem": fileURLToPath(
         new URL("./packages/storage-filesystem/src/index.ts", import.meta.url),
       ),
+      "@agentforge/whisper-client": fileURLToPath(
+        new URL("./packages/whisper-client/src/index.ts", import.meta.url),
+      ),
     },
   },
   test: {

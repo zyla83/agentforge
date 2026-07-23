@@ -19,8 +19,9 @@ server, streams assistant responses, and persists immutable conversations with
 - The configured model installed locally
 
 Install repository prerequisites and optional live components through the
-[central installation guide](../../docs/INSTALLATION.md). Ollama, Spotify, and
-Piper are not required by deterministic repository verification.
+[central installation guide](../../docs/INSTALLATION.md). Ollama, Spotify,
+Piper, FFmpeg, whisper.cpp, and speech models are not required by deterministic
+repository verification.
 
 ## Start
 
@@ -48,6 +49,13 @@ latest conversation automatically; use `/list` and `/load` to resume one.
 | `AGENTFORGE_PIPER_EXECUTABLE` | Required only when TTS mode is `piper` |
 | `AGENTFORGE_PIPER_MODEL` | Required only when TTS mode is `piper` |
 | `AGENTFORGE_PIPER_CONFIG` | Optional explicit `.onnx.json` path in Piper mode |
+| `AGENTFORGE_CHAT_STT` | `off` |
+| `AGENTFORGE_FFMPEG_EXECUTABLE` | Required only when STT mode is `whisper` |
+| `AGENTFORGE_MICROPHONE_DEVICE` | Required exact DirectShow audio device name only in `whisper` mode |
+| `AGENTFORGE_WHISPER_EXECUTABLE` | Required only when STT mode is `whisper` |
+| `AGENTFORGE_WHISPER_MODEL` | Required multilingual `.bin` model only in `whisper` mode |
+| `AGENTFORGE_WHISPER_LANGUAGE` | `auto` in `whisper` mode |
+| `AGENTFORGE_VOICE_RECORDING_SECONDS` | `5` in `whisper` mode; accepts 1 through 30 |
 | `SPOTIFY_CLIENT_ID` | Required only when tool mode is `spotify` |
 | `SPOTIFY_REDIRECT_URI` | `http://127.0.0.1:43821/callback` |
 | `AGENTFORGE_SPOTIFY_DATA_DIR` | `<home>/.agentforge/spotify` |
@@ -251,9 +259,10 @@ The fixed Windows player receives only the temporary WAV path. Audible output
 may be heard or captured by people and devices in the physical environment.
 Local TTS does not make the Ollama or Spotify paths private or offline.
 
-This mode provides no speech-to-text, microphone capture, wake word, voice
-activity detection, continuous voice loop, cloud TTS, model-callable speech
-tool, audio cache, voice cloning, SSML, volume control, or device selection.
+This mode provides no wake word, voice activity detection, continuous voice
+loop, cloud TTS, model-callable speech tool, audio cache, voice cloning, SSML,
+volume control, or output-device selection. The independently configured local
+STT mode described below supplies only explicit half-duplex microphone input.
 
 Manual verification should use a short non-sensitive prompt. Confirm off mode,
 one final spoken response after text completion, one streaming response, one
@@ -261,6 +270,47 @@ harmless Spotify read in Spotify mode, Ctrl+C cancellation, continued text chat
 after a TTS failure, clean `/exit`, and absence of WAV/model/config/history
 artifacts in `git status`. Do not record complete local paths or conversation
 content in committed evidence.
+
+## Local microphone transcription
+
+Speech-to-text is disabled by default and configured independently of tools and
+Piper output. It is supported only on Windows and requires trusted prebuilt
+FFmpeg and whisper.cpp packages, an exact DirectShow device name, and a compatible
+multilingual GGML model. Complete the canonical
+[local microphone and STT setup](../../docs/INSTALLATION.md#optional-local-microphone-and-stt-setup)
+before enabling it. AgentForge does not download or discover these components.
+
+Configure only private absolute paths and the exact device name in the current
+PowerShell session:
+
+```powershell
+$env:AGENTFORGE_CHAT_STT = "whisper"
+$env:AGENTFORGE_FFMPEG_EXECUTABLE = "<absolute-path-to-ffmpeg.exe>"
+$env:AGENTFORGE_MICROPHONE_DEVICE = "<exact-DirectShow-audio-device-name>"
+$env:AGENTFORGE_WHISPER_EXECUTABLE = "<absolute-path-to-whisper-cli.exe>"
+$env:AGENTFORGE_WHISPER_MODEL = "<absolute-path-to-multilingual-model.bin>"
+$env:AGENTFORGE_WHISPER_LANGUAGE = "auto"
+$env:AGENTFORGE_VOICE_RECORDING_SECONDS = "5"
+pnpm example:chat
+```
+
+Run `/voice` to record for the configured default duration or `/voice 1`
+through `/voice 30` for one explicit duration. The command prints a bounded,
+sanitized `You (voice):` preview and sends the exact recognized text through
+the same conversation-turn path as typed input. The resulting text is
+model-visible, can influence registered tools, and is persisted like typed
+content after a successful turn. The temporary WAV and transcript file are
+removed best effort and are never stored as conversation attachments; deletion
+is not secure erasure.
+
+Each `/voice` command authorizes one bounded recording. There is no background
+microphone access, wake word, continuous listening, VAD, partial transcript, or
+automatic command correction. Recording, transcription, model generation,
+tool execution, and optional Piper output occur sequentially. Ctrl+C during
+recording or transcription cancels the active child process, cleans temporary
+artifacts best effort, and returns to text chat. STT failures are non-fatal.
+Accuracy is not guaranteed, so monitor recognized commands, especially when a
+separate side-effecting tool mode is enabled.
 
 ## Commands
 
@@ -274,6 +324,7 @@ content in committed evidence.
 /delete <conversation-id>   Delete a saved conversation
 /export <file-path>         Export the current conversation
 /import <file-path>         Import and save a conversation
+/voice [seconds]            Record and transcribe one 1-30 second microphone sample
 /exit                       Exit the chat
 ```
 
@@ -314,9 +365,10 @@ You: /import "./exports/my conversation.json"
 ## Cancellation and persistence failures
 
 Pressing Ctrl+C during generation cancels the active response and does not save
-partial output. During Piper synthesis or playback it cancels the active speech
-operation and removes its temporary output. Ctrl+C at the prompt exits. EOF and
-SIGTERM also shut down cleanly without an extra save.
+partial output. During microphone recording, transcription, Piper synthesis,
+or playback it cancels the active speech operation and removes its temporary
+output best effort. Ctrl+C at the prompt exits. EOF and SIGTERM also shut down
+cleanly without an extra save.
 
 If generation completes but saving fails, the displayed response is not added
 to subsequent context: the previous persisted conversation remains active.
@@ -340,4 +392,5 @@ does not save automatically.
 - No runtime tool-mode switching
 - No Markdown rendering
 - No model switching during a session
-- Piper speech output is Windows-only and has no microphone or voice-input path
+- Speech input and Piper output are Windows-only, explicit, and half-duplex;
+  there is no continuous listening, wake word, VAD, or streaming transcription

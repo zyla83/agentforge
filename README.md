@@ -37,6 +37,12 @@ speaks only a completed final assistant response, remains disabled by default,
 and requires a separately obtained trusted Piper executable and voice model.
 See [installation and external dependencies](docs/INSTALLATION.md).
 
+Optional local microphone input is also available on Windows through an
+explicit, half-duplex `/voice [seconds]` command. It requires separately
+downloaded trusted FFmpeg and prebuilt whisper.cpp executables plus a compatible
+multilingual GGML model. AgentForge never listens in the background. See the
+[local microphone and STT setup](docs/INSTALLATION.md#optional-local-microphone-and-stt-setup).
+
 AgentForge follows semantic versioning, but APIs may evolve during the 0.x
 series. Version 0.1.0 is the first MVP baseline, not a production-readiness or
 formal security claim.
@@ -57,10 +63,12 @@ formal security claim.
 
 ## What the MVP does not support
 
-The MVP baseline does not include voice I/O, Windows control tools, arbitrary shell
-execution, automatic tool retries, confirmation or permission engines,
+The MVP baseline does not include voice I/O, Windows control tools, arbitrary
+shell execution, automatic tool retries, confirmation or permission engines,
 sandboxing, transactions or rollback, remote/distributed execution, a GUI,
-additional real LLM providers, or telemetry exporters.
+additional real LLM providers, or telemetry exporters. Post-MVP additions now
+provide narrow opt-in Windows speech input and output paths without changing
+that historical baseline.
 
 ## Requirements
 
@@ -70,8 +78,10 @@ additional real LLM providers, or telemetry exporters.
 | Live Ollama chat | Optional | Ollama and a locally installed model |
 | Spotify tools | Optional | Ollama chat tool orchestration, internet access, Spotify Premium, and a Spotify Developer application |
 | Piper speech output | Optional | Windows chat CLI, Ollama live chat, a trusted Piper installation, and a compatible ONNX voice model and configuration |
+| Local microphone transcription | Optional | Windows chat CLI, Ollama live chat, trusted FFmpeg and whisper.cpp installations, an exact DirectShow audio device name, and a compatible multilingual GGML model |
 
-Ollama, Spotify, and Piper are not required for deterministic build and test.
+Ollama, Spotify, Piper, FFmpeg, whisper.cpp, and speech models are not required
+for deterministic build and test.
 See [Installation and external dependencies](docs/INSTALLATION.md) for the
 canonical setup, environment variables, official sources, and security
 boundaries.
@@ -162,10 +172,21 @@ Optional Windows-only Piper speech output is independent of tool mode. With
 `AGENTFORGE_CHAT_TTS=piper`, the CLI prints each completed response first,
 synthesizes the exact final text locally, plays one temporary WAV through the
 default Windows audio output, and then deletes the temporary directory. It does
-not add microphone input, a speech tool, cloud TTS, audio history, or device and
-volume controls. Piper failures leave the text response available and the chat
-usable. Installation, configuration, and security details are in the
+not add a speech tool, cloud TTS, audio history, or device and volume controls.
+Piper failures leave the text response available and the chat usable.
+Installation, configuration, and security details are in the
 [central installation guide](docs/INSTALLATION.md#optional-piper-tts-setup).
+
+Optional Windows-only microphone transcription is configured independently
+with `AGENTFORGE_CHAT_STT=whisper`. `/voice` records the configured default
+duration, while `/voice <seconds>` accepts one to 30 seconds. The CLI records
+once through the explicitly configured FFmpeg DirectShow device, transcribes
+the temporary WAV through the explicitly configured `whisper-cli`, previews
+the recognized text, and submits it through the ordinary conversation-turn
+path. Ctrl+C cancels recording or transcription and returns to text chat. This
+is half-duplex and user initiated: there is no wake word, continuous listening,
+background microphone access, VAD, or streaming transcription. See the
+[central STT setup](docs/INSTALLATION.md#optional-local-microphone-and-stt-setup).
 
 ## Tool-enabled chat
 
@@ -205,6 +226,11 @@ Application
   -> final assistant response
   -> conversation persistence
   -> optional application-owned Piper speech output
+
+Explicit /voice command
+  -> application-owned FFmpeg microphone recording
+  -> @agentforge/whisper-client transcription
+  -> ordinary ConversationEngine user turn
 ```
 
 The provider SDK owns provider-neutral contracts. Core owns registration and
@@ -229,6 +255,7 @@ Publishable library packages:
 - `@agentforge/provider-sdk` — provider, LLM, streaming, health, and tool contracts
 - `@agentforge/shared` — shared result and error primitives
 - `@agentforge/storage-filesystem` — durable Node.js conversation store
+- `@agentforge/whisper-client` — narrow local whisper.cpp transcription process adapter
 
 Private examples:
 
@@ -394,8 +421,9 @@ temporary directories, and restored global state.
 - Ollama is the only implemented real LLM provider.
 - Tool compatibility varies by installed model and Ollama version.
 - There is no dynamic model capability probing or hardcoded model allowlist.
-- Voice input, continuous voice interaction, and cross-platform speech output
-  are not implemented. Optional speech output is Windows-only and uses local Piper.
+- Voice input and output are explicit, Windows-only, and half-duplex. There is
+  no continuous listening, wake word, VAD, streaming transcription, or
+  cross-platform speech backend.
 - There is no Windows tool library, confirmation/permission engine,
   retry engine, sandbox, transaction rollback, distributed execution, or GUI.
 - Filesystem storage is local and single-process oriented.
@@ -404,8 +432,8 @@ temporary directories, and restored global state.
 
 ## Roadmap after MVP
 
-Future capability tracks include desktop tools, voice I/O, permission and
-confirmation policy, additional providers, structured logging exporters,
+Future capability tracks include desktop tools, richer voice interaction,
+permission and confirmation policy, additional providers, structured logging exporters,
 package publication, graphical interfaces, and remote/distributed execution.
 These are outside the 0.1.0 MVP baseline.
 

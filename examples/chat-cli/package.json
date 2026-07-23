@@ -15,7 +15,8 @@
     "@agentforge/provider-ollama": "workspace:*",
     "@agentforge/provider-sdk": "workspace:*",
     "@agentforge/spotify-client": "workspace:*",
-    "@agentforge/storage-filesystem": "workspace:*"
+    "@agentforge/storage-filesystem": "workspace:*",
+    "@agentforge/whisper-client": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "22.15.30",

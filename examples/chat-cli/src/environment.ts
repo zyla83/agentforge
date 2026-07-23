@@ -13,9 +13,15 @@ const DEFAULT_SYSTEM_PROMPT =
   "You are a helpful, clear, and concise local AI assistant.";
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_DATA_DIRECTORY = ".agentforge/chat";
+const DEFAULT_WHISPER_LANGUAGE = "auto";
+const DEFAULT_VOICE_RECORDING_SECONDS = 5;
+const MAX_MICROPHONE_DEVICE_LENGTH = 256;
+const MAX_WHISPER_LANGUAGE_LENGTH = 32;
+const WHISPER_LANGUAGE_PATTERN = /^[A-Za-z0-9_-]+$/u;
 
 export type ChatToolMode = "off" | "example" | "spotify";
 export type ChatTtsMode = "off" | "piper";
+export type ChatSttMode = "off" | "whisper";
 
 export interface ChatPiperEnvironment {
   readonly executable: string;
@@ -26,6 +32,20 @@ export interface ChatPiperEnvironment {
 export interface ChatTtsEnvironment {
   readonly mode: ChatTtsMode;
   readonly piper?: Readonly<ChatPiperEnvironment>;
+}
+
+export interface ChatWhisperEnvironment {
+  readonly ffmpegExecutable: string;
+  readonly microphoneDevice: string;
+  readonly whisperExecutable: string;
+  readonly whisperModel: string;
+  readonly language: string;
+  readonly recordingSeconds: number;
+}
+
+export interface ChatSttEnvironment {
+  readonly mode: ChatSttMode;
+  readonly whisper?: Readonly<ChatWhisperEnvironment>;
 }
 
 export interface ChatSpotifyEnvironment {
@@ -42,6 +62,7 @@ export interface ChatEnvironment {
   readonly dataDirectory: string;
   readonly toolMode: ChatToolMode;
   readonly tts: Readonly<ChatTtsEnvironment>;
+  readonly stt: Readonly<ChatSttEnvironment>;
   readonly spotify?: Readonly<ChatSpotifyEnvironment>;
 }
 
@@ -64,6 +85,7 @@ export function loadChatEnvironment(
   );
   const toolMode = readToolMode(environment);
   const tts = readTtsEnvironment(environment, platform);
+  const stt = readSttEnvironment(environment, platform);
   const spotify =
     toolMode === "spotify" ? readSpotifyEnvironment(environment) : undefined;
 
@@ -75,8 +97,84 @@ export function loadChatEnvironment(
     dataDirectory,
     toolMode,
     tts,
+    stt,
     ...(spotify === undefined ? {} : { spotify }),
   });
+}
+
+function readSttEnvironment(
+  environment: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+): Readonly<ChatSttEnvironment> {
+  const configuredMode = environment.AGENTFORGE_CHAT_STT;
+  const mode =
+    configuredMode === undefined ? "off" : configuredMode.trim().toLowerCase();
+  if (mode !== "off" && mode !== "whisper") {
+    throw new Error('AGENTFORGE_CHAT_STT must be "off" or "whisper".');
+  }
+  if (mode === "off") return Object.freeze({ mode });
+  if (platform !== "win32") {
+    throw new Error("Local microphone input is supported only on Windows.");
+  }
+  const ffmpegExecutable = readExplicitFilePath(
+    environment.AGENTFORGE_FFMPEG_EXECUTABLE,
+    "AGENTFORGE_FFMPEG_EXECUTABLE",
+  );
+  const whisperExecutable = readExplicitFilePath(
+    environment.AGENTFORGE_WHISPER_EXECUTABLE,
+    "AGENTFORGE_WHISPER_EXECUTABLE",
+  );
+  const whisperModel = readExplicitFilePath(
+    environment.AGENTFORGE_WHISPER_MODEL,
+    "AGENTFORGE_WHISPER_MODEL",
+    ".bin",
+  );
+  const microphoneDevice = environment.AGENTFORGE_MICROPHONE_DEVICE;
+  if (
+    microphoneDevice === undefined ||
+    microphoneDevice.trim().length === 0 ||
+    microphoneDevice.length > MAX_MICROPHONE_DEVICE_LENGTH ||
+    containsControlCharacters(microphoneDevice)
+  ) {
+    throw new Error(
+      `AGENTFORGE_MICROPHONE_DEVICE must be a non-empty device name of at most ${MAX_MICROPHONE_DEVICE_LENGTH} characters without control characters.`,
+    );
+  }
+  const language =
+    environment.AGENTFORGE_WHISPER_LANGUAGE ?? DEFAULT_WHISPER_LANGUAGE;
+  if (
+    language.length === 0 ||
+    language.length > MAX_WHISPER_LANGUAGE_LENGTH ||
+    language.trim() !== language ||
+    !WHISPER_LANGUAGE_PATTERN.test(language)
+  ) {
+    throw new Error(
+      `AGENTFORGE_WHISPER_LANGUAGE must be a 1-${MAX_WHISPER_LANGUAGE_LENGTH} character ASCII language token.`,
+    );
+  }
+  const recordingSeconds = readVoiceRecordingSeconds(environment);
+  return Object.freeze({
+    mode,
+    whisper: Object.freeze({
+      ffmpegExecutable,
+      microphoneDevice,
+      whisperExecutable,
+      whisperModel,
+      language,
+      recordingSeconds,
+    }),
+  });
+}
+
+function readVoiceRecordingSeconds(environment: NodeJS.ProcessEnv): number {
+  const value = environment.AGENTFORGE_VOICE_RECORDING_SECONDS;
+  if (value === undefined) return DEFAULT_VOICE_RECORDING_SECONDS;
+  if (!/^(?:[1-9]|[12][0-9]|30)$/u.test(value)) {
+    throw new Error(
+      "AGENTFORGE_VOICE_RECORDING_SECONDS must be an integer from 1 to 30.",
+    );
+  }
+  return Number(value);
 }
 
 function readTtsEnvironment(
@@ -121,6 +219,14 @@ function readTtsEnvironment(
 }
 
 function readPiperPath(
+  value: string | undefined,
+  name: string,
+  suffix?: string,
+): string {
+  return readExplicitFilePath(value, name, suffix);
+}
+
+function readExplicitFilePath(
   value: string | undefined,
   name: string,
   suffix?: string,

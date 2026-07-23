@@ -13,6 +13,7 @@
     { "path": "./packages/shared" },
     { "path": "./packages/spotify-client" },
     { "path": "./packages/storage-filesystem" },
+    { "path": "./packages/whisper-client" },
     { "path": "./packages/core" },
     { "path": "./examples/basic-agent" },
     { "path": "./examples/chat-cli" },

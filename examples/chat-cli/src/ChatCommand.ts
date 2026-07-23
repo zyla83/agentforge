@@ -9,6 +9,7 @@ export enum ChatCommandType {
   Delete = "delete",
   Export = "export",
   Import = "import",
+  Voice = "voice",
 }
 
 export type ChatCommand =
@@ -28,4 +29,8 @@ export type ChatCommand =
   | {
       readonly type: ChatCommandType.Export | ChatCommandType.Import;
       readonly filePath: string;
+    }
+  | {
+      readonly type: ChatCommandType.Voice;
+      readonly durationSeconds?: number;
     };

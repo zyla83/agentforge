@@ -6,8 +6,8 @@
 
 This document is the source of truth for installing the AgentForge repository
 and configuring its optional live integrations. Repository development and
-deterministic verification require Git, Node.js, and pnpm. Ollama, Spotify, and
-Piper are separate runtime integrations and are not required by
+deterministic verification require Git, Node.js, and pnpm. Ollama, Spotify,
+Piper, FFmpeg, and whisper.cpp are separate runtime integrations and are not required by
 `pnpm verify:mvp`.
 
 AgentForge does not install, download, update, or manage external executables,
@@ -34,8 +34,10 @@ CI evidence: https://github.com/zyla83/agentforge/actions/runs/29912269816
 | Ollama | Reachable Ollama API and a locally installed selected model | Windows 10.0.26200.8875, Ollama 0.32.1, and `llama3.1:8b` | 2026-07-20 | Historical MVP manual verification in [MVP.md](MVP.md#manual-ollama-smoke-test) |
 | Spotify | Internet access, Spotify Premium, and a Spotify Developer application | Personal Development Mode application; service version not user-controlled | 2026-07-20 | Manual authentication, playback inspection, search, device inspection, and playback-start checks; not part of CI |
 | Piper | Compatible Piper CLI plus an ONNX voice and configuration; AgentForge playback is Windows-only | Windows 11, Python 3.13.7, `piper-tts` 1.5.0, and `pl_PL-gosia-medium` | 2026-07-22 | Package metadata plus manual UTF-8 synthesis and audible playback; not part of CI |
+| Local microphone STT | Windows DirectShow capture through FFmpeg plus whisper.cpp `whisper-cli` and a compatible multilingual GGML model | Windows 11 with FFmpeg and whisper.cpp CLI versions not recorded, multilingual `ggml-small.bin` and `ggml-medium.bin`, and language `pl` | 2026-07-23 | Manual recording, direct transcription, `/voice` boundaries, recording/transcription cancellation, temporary cleanup, Piper sequencing, and a harmless Spotify search; not part of CI |
 
-The Ollama, Spotify, and Piper checks are live manual evidence. They are not
+The Ollama, Spotify, and Piper checks are live manual evidence. The local
+microphone STT path has deterministic test evidence only. These integrations are not
 part of deterministic CI and do not guarantee compatibility with future
 external releases.
 
@@ -108,7 +110,7 @@ corepack pnpm verify:mvp
 The successful deterministic path formats and lints the repository, builds all
 workspace projects, runs the complete Vitest suite and deterministic examples,
 and verifies package-root consumers. It does not start Ollama, contact Spotify,
-run Piper, or download a model.
+run Piper, FFmpeg, whisper.cpp, or download a model.
 
 ## Optional Ollama installation
 
@@ -396,8 +398,128 @@ captured in the physical environment.
 
 Piper producing a valid WAV does not prove that the Windows default playback
 device is available. AgentForge does not provide macOS or Linux chat playback,
-microphone input, speech-to-text, voice selection, volume control, or audio
-device selection.
+voice selection, volume control, or audio output device selection.
+
+## Optional local microphone and STT setup
+
+Microphone transcription is optional, disabled by default, and supported only
+by the Windows chat CLI. It uses an explicitly configured FFmpeg executable and
+exact DirectShow audio device name to record one bounded WAV, then invokes an
+explicitly configured whisper.cpp `whisper-cli` and GGML model. AgentForge does
+not supply, download, update, or search `PATH` for these components.
+
+Use only the official projects and documentation:
+
+- [FFmpeg downloads](https://ffmpeg.org/download.html)
+- [FFmpeg DirectShow input documentation](https://ffmpeg.org/ffmpeg-devices.html#dshow)
+- [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
+- [whisper.cpp CLI documentation](https://github.com/ggml-org/whisper.cpp/blob/master/examples/cli/README.md)
+- [whisper.cpp model guidance](https://github.com/ggml-org/whisper.cpp/blob/master/models/README.md)
+
+This guide uses prebuilt Windows packages. It does not require Visual Studio,
+CMake, or manual compilation.
+
+### Download a prebuilt FFmpeg package
+
+Open the official FFmpeg download page, select **Windows EXE Files**, and choose
+one of the Windows build providers listed there. Download a current 64-bit
+release ZIP containing `ffmpeg.exe`, extract the complete package to a private
+tools directory, and keep its supporting files together. Record the absolute
+path to `bin\ffmpeg.exe`. FFmpeg itself publishes source code and links to the
+available Windows executable providers from that official page; AgentForge does
+not select or mirror a package.
+
+### Download the prebuilt whisper.cpp package
+
+Open the official [whisper.cpp releases](https://github.com/ggml-org/whisper.cpp/releases/latest),
+expand **Assets**, and download `whisper-bin-x64.zip` for standard 64-bit
+Windows CPU use. Extract the complete archive to a private tools directory.
+Keep `whisper-cli.exe` beside the DLL files supplied in the archive; copying
+only the executable can make it fail at startup. Do not select Win32, BLAS, or
+CUDA packages unless their additional architecture or runtime requirements are
+deliberately configured and verified.
+
+### Download a multilingual GGML model
+
+The prebuilt executable archive does not include a speech model. Follow the
+official whisper.cpp model guidance and download a pre-converted multilingual
+GGML model such as `ggml-small.bin` or `ggml-medium.bin`. The official
+whisper.cpp download script obtains these files from the project's model
+repository. An equivalent PowerShell download is:
+
+```powershell
+$WhisperRoot = "<absolute-whisper-directory>"
+$ModelName = "small"
+$ModelDirectory = Join-Path $WhisperRoot "models"
+New-Item -ItemType Directory -Force $ModelDirectory | Out-Null
+Start-BitsTransfer `
+  -Source "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-$ModelName.bin" `
+  -Destination (Join-Path $ModelDirectory "ggml-$ModelName.bin")
+```
+
+For Polish, use a multilingual model name without `.en`. Models whose names
+contain `.en` are English-only. Larger models normally require more disk,
+memory, and processing time; select one explicitly and verify it locally.
+
+Verify the chosen binaries outside the repository, replacing placeholders with
+private absolute paths. First check FFmpeg and list DirectShow devices:
+
+```powershell
+$Ffmpeg = "<absolute-path-to-ffmpeg.exe>"
+& $Ffmpeg -version
+& $Ffmpeg -hide_banner -list_devices true -f dshow -i dummy
+```
+
+Copy the exact audio device name reported by FFmpeg. AgentForge does not
+enumerate devices, invent a local device name, or implicitly select the Windows
+default microphone. Ensure Windows privacy settings permit desktop applications
+to access the selected microphone.
+
+Verify `whisper-cli` and the selected model against a short, user-owned WAV:
+
+```powershell
+$Whisper = "<absolute-path-to-whisper-cli.exe>"
+$WhisperModel = "<absolute-path-to-multilingual-model.bin>"
+$TestWav = "<absolute-path-to-user-owned-test.wav>"
+& $Whisper --help
+& $Whisper -m $WhisperModel -f $TestWav -l auto -otxt -of "<absolute-output-prefix>" -np -nt
+```
+
+Then configure the current PowerShell session:
+
+```powershell
+$env:AGENTFORGE_CHAT_STT = "whisper"
+$env:AGENTFORGE_FFMPEG_EXECUTABLE = "<absolute-path-to-ffmpeg.exe>"
+$env:AGENTFORGE_MICROPHONE_DEVICE = "<exact-DirectShow-audio-device-name>"
+$env:AGENTFORGE_WHISPER_EXECUTABLE = "<absolute-path-to-whisper-cli.exe>"
+$env:AGENTFORGE_WHISPER_MODEL = "<absolute-path-to-multilingual-model.bin>"
+$env:AGENTFORGE_WHISPER_LANGUAGE = "auto"
+$env:AGENTFORGE_VOICE_RECORDING_SECONDS = "5"
+pnpm example:chat
+```
+
+Use `/voice` for the configured default duration or `/voice <seconds>` for one
+explicit whole-number duration from 1 through 30 seconds. Each command permits
+one half-duplex recording only. There is no background listening, wake word,
+voice activity detection, streaming transcription, or automatic microphone
+selection. Ctrl+C during recording or transcription cancels the active process
+and returns to the text prompt.
+
+The configured executables run with the chat application's privileges and are
+not sandboxed. Recording and transcription happen locally after installation,
+but binary and model downloads may require network access. Models can require
+substantial disk, memory, and CPU resources; first download and transcription
+latency depend on the chosen model and machine.
+
+Audio and transcripts are sensitive. AgentForge stores temporary audio and
+transcript output in a unique operating-system temporary directory and removes
+that directory best effort after every terminal path; this is not secure
+erasure. Audio is never added to conversation storage. A recognized transcript
+becomes ordinary model-visible user content after submission, can influence
+registered tool calls, and is persisted like typed content after a successful
+turn. If Spotify mode is separately enabled, recognized instructions can lead
+to Spotify tool calls, including playback start. STT accuracy is not guaranteed;
+monitor recognized commands before relying on resulting actions.
 
 ## Environment variable reference
 
@@ -416,12 +538,20 @@ not load `.env` files.
 | `AGENTFORGE_PIPER_EXECUTABLE` | None | Existing absolute regular-file path; required only in `piper` mode. |
 | `AGENTFORGE_PIPER_MODEL` | None | Existing absolute regular-file path ending in `.onnx`; required only in `piper` mode. |
 | `AGENTFORGE_PIPER_CONFIG` | None | Optional existing absolute regular-file path ending in `.onnx.json` in `piper` mode. |
+| `AGENTFORGE_CHAT_STT` | `off` | `off` or `whisper`; matching is trimmed and case-insensitive. `whisper` is rejected outside Windows. |
+| `AGENTFORGE_FFMPEG_EXECUTABLE` | None | Existing absolute regular-file path; required only in `whisper` mode. |
+| `AGENTFORGE_MICROPHONE_DEVICE` | None | Exact non-empty DirectShow audio device name, up to 256 characters and without control characters; required only in `whisper` mode. |
+| `AGENTFORGE_WHISPER_EXECUTABLE` | None | Existing absolute regular-file path; required only in `whisper` mode. |
+| `AGENTFORGE_WHISPER_MODEL` | None | Existing absolute regular-file path ending in `.bin`; required only in `whisper` mode. |
+| `AGENTFORGE_WHISPER_LANGUAGE` | `auto` | One trimmed token of up to 32 ASCII letters, digits, `_`, or `-`; read only in `whisper` mode. |
+| `AGENTFORGE_VOICE_RECORDING_SECONDS` | `5` | Whole number from 1 through 30; read only in `whisper` mode. `/voice <seconds>` can override it for one recording. |
 | `SPOTIFY_CLIENT_ID` | None | Non-empty Client ID; required only in `spotify` tool mode. It is not a client secret. |
 | `SPOTIFY_REDIRECT_URI` | `http://127.0.0.1:43821/callback` | Must be `http://127.0.0.1:<port>/<path>` with port 1-65535 and no credentials, query, or fragment; required Dashboard entry must match. |
 | `AGENTFORGE_SPOTIFY_DATA_DIR` | `<home>/.agentforge/spotify` | Optional non-empty credential-directory path; relative values resolve from the current working directory. |
 
-When TTS is `off`, Piper-specific variables are ignored. Spotify-specific
-variables are read only when tool mode is `spotify`.
+When TTS is `off`, Piper-specific variables are ignored. When STT is `off`, all
+FFmpeg, microphone, whisper.cpp, language, and recording-duration variables are
+ignored. Spotify-specific variables are read only when tool mode is `spotify`.
 
 ## Platform, network, privacy, and security boundaries
 
@@ -431,6 +561,7 @@ variables are read only when tool mode is `spotify`.
 | Ollama | Installation and model retrieval require external downloads. Local inference still runs with the privileges and resource limits of the Ollama process. |
 | Spotify | Authorization and every API request require internet access. Listening activity, device metadata, searches, commands, and results may be model-visible or persisted. |
 | Piper | Package and voice retrieval require external downloads. The configured executable and model are user-trusted local inputs and run with application privileges. |
+| Microphone STT | FFmpeg, whisper.cpp, and model retrieval may require external downloads. Capture and transcription are local after installation. The configured binaries and model are user-trusted inputs, run with application privileges, and are not sandboxed. Temporary deletion is best-effort. |
 | Conversation storage | Chat history defaults to `.agentforge/chat` relative to the launch directory and may contain prompts, responses, tool calls, and tool results. |
 | Credentials | Spotify refresh credentials are sensitive plaintext. AgentForge has no credential vault. |
 
@@ -458,6 +589,14 @@ persisted content, and terminal sanitization is not secret redaction.
 | Piper exits non-zero or produces invalid WAV | Run the same executable and model through its CLI, review model/config compatibility, and keep the test outside the repository. |
 | Piper times out | Confirm the executable and model load independently; increase the existing request timeout only after identifying expected model latency. |
 | WAV playback fails | Confirm Windows default-device availability. Successful synthesis and successful playback are separate checks. |
+| DirectShow microphone is unavailable | Run the official FFmpeg device-listing command again, copy the exact audio device name, and confirm the device is connected and not exclusively held elsewhere. |
+| Microphone permission is denied | In Windows privacy settings, allow microphone access for desktop applications and verify the selected device independently. |
+| FFmpeg produces an invalid WAV | Test the configured executable and exact DirectShow device outside AgentForge; the integration requires a non-empty RIFF/WAVE recording. |
+| whisper.cpp rejects the model or WAV | Verify the model and a user-owned WAV directly with the configured `whisper-cli`; use a compatible multilingual GGML model for Polish. |
+| Transcription is empty | Speak during the bounded recording, verify microphone input levels, and test the WAV and model directly; AgentForge does not submit an empty transcript. |
+| Recording or transcription times out | Verify the external component independently and choose a model appropriate for available CPU and memory before increasing the shared request timeout. |
+| Voice input is cancelled | Ctrl+C intentionally terminates the active recording or transcription and returns to text chat; invoke `/voice` again explicitly if desired. |
+| Voice transcription has high latency | Use official whisper.cpp model guidance to choose a smaller compatible model and account for local CPU, memory, and disk constraints. |
 
 No failure described here triggers an automatic external installation, retry,
 credential repair, model replacement, or fallback provider.

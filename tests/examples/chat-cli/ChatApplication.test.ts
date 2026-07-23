@@ -659,7 +659,7 @@ describe("ChatApplication", () => {
     await output.waitFor("You: ", 2);
     input.write("/help\n");
     await output.waitFor(
-      "Generated WAV files are temporary and deleted after playback.\nYou: ",
+      "STT and TTS are not model tools. Temporary audio deletion is best effort.\nYou: ",
     );
     input.write("/info\n");
     await output.waitFor("Data directory: C:\\test-data\nYou: ");
@@ -678,6 +678,9 @@ describe("ChatApplication", () => {
     expect(output.read()).toContain("Tools mode: off");
     expect(output.read()).toContain("Registered tools: none");
     expect(output.read()).toContain("Tool execution: disabled");
+    expect(output.read()).toContain("STT: off");
+    expect(output.read()).toContain("STT mode: off");
+    expect(output.read()).toContain("Whisper configured: no");
     expect(output.read()).toContain("TTS: off");
     expect(output.read()).toContain("TTS mode: off");
     expect(output.read()).toContain("Piper configured: no");

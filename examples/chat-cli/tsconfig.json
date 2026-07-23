@@ -15,6 +15,7 @@
     { "path": "../../packages/provider-ollama" },
     { "path": "../../packages/provider-sdk" },
     { "path": "../../packages/spotify-client" },
-    { "path": "../../packages/storage-filesystem" }
+    { "path": "../../packages/storage-filesystem" },
+    { "path": "../../packages/whisper-client" }
   ]
 }

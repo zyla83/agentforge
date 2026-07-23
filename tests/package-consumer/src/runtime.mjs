@@ -11,6 +11,7 @@ import * as providerSdk from "@agentforge/provider-sdk";
 import * as shared from "@agentforge/shared";
 import * as spotifyClient from "@agentforge/spotify-client";
 import * as storageFilesystem from "@agentforge/storage-filesystem";
+import * as whisperClient from "@agentforge/whisper-client";
 
 const packageChecks = [
   ["@agentforge/config", config, ["loadConfig"]],
@@ -60,6 +61,21 @@ const packageChecks = [
     "@agentforge/storage-filesystem",
     storageFilesystem,
     ["FilesystemConversationStore", "createFilesystemConversationStore"],
+  ],
+  [
+    "@agentforge/whisper-client",
+    whisperClient,
+    [
+      "WhisperClient",
+      "WhisperConfigurationError",
+      "WhisperRequestError",
+      "WhisperResourceError",
+      "WhisperAbortError",
+      "WhisperTimeoutError",
+      "WhisperTransportError",
+      "WhisperProcessError",
+      "WhisperOutputError",
+    ],
   ],
 ];
 
